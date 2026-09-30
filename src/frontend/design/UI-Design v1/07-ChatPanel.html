@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuMate · 07 ChatPanel</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', 'Microsoft YaHei', sans-serif; -webkit-font-smoothing: antialiased; }
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .anim-fade-up { animation: fadeInUp 240ms cubic-bezier(0.2,0,0,1) backwards; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .pulse { animation: pulse 2s infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 1s linear infinite; }
+    .send-btn { transition: all 160ms cubic-bezier(0.2,0,0,1); }
+    .send-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
+    .send-btn:active { transform: scale(0.95); }
+    .tool-card { background: #f8fafc; }
+    .agent-row, .chat-row { transition: background 150ms, color 150ms; }
+    .agent-row:hover, .chat-row:hover { background: #f8fafc; }
+    .agent-row[aria-expanded="true"] .tree-caret { transform: rotate(90deg); }
+    .tree-caret { transition: transform 150ms; }
+    .chat-list { position: relative; margin: 2px 0 7px 33px; padding-left: 10px; }
+    .chat-list::before { content: ""; position: absolute; left: 0; top: 0; bottom: 7px; width: 1px; background: #e2e8f0; }
+    .chat-row::before { content: ""; position: absolute; left: -10px; top: 50%; width: 7px; height: 1px; background: #e2e8f0; }
+  </style>
+</head>
+<body class="bg-slate-50">
+
+  <div class="min-h-screen flex flex-col">
+    <!-- 顶部 Header (项目级) -->
+    <header class="h-14 border-b border-slate-200 bg-white flex items-center px-5 gap-4">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-lg flex items-center justify-center" style="background: #1e3a8a;">
+          <i data-lucide="file-text" class="text-white" style="width:14px;height:14px;stroke-width:2;"></i>
+        </div>
+        <span class="text-slate-900 text-sm font-semibold">DocuMate</span>
+      </div>
+      <div class="flex-1 flex items-center gap-2 text-xs text-slate-500"><i data-lucide="folder" style="width:13px;height:13px;"></i><span>工作区</span><i data-lucide="chevron-right" style="width:12px;height:12px;"></i><span class="font-medium text-slate-700">数据库课程 Agent</span></div>
+      <button onclick="location.href='08-SettingsDrawer.html'" class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold cursor-pointer"
+           style="background: #1e3a8a;">Q</button>
+    </header>
+
+    <div class="flex-1 flex">
+      <!-- Sidebar · 文件区 / 工作区 -->
+      <aside class="w-[280px] border-r border-slate-200 bg-white flex flex-col">
+        <div class="p-3 border-b border-slate-100">
+          <button onclick="prototypeToast('已打开工作区选择器')" class="w-full flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-slate-100 rounded-lg text-sm text-slate-700 transition">
+            <i data-lucide="folder" class="text-slate-500" style="width:16px;height:16px;stroke-width:2;"></i>
+            <span class="truncate">~/Documents/学习</span>
+          </button>
+        </div>
+        <div class="flex border-b border-slate-200">
+          <button onclick="location.href='05-EmptyState.html'" class="flex-1 flex items-center justify-center gap-1.5 py-3 text-sm text-slate-500"><i data-lucide="folder" style="width:14px;height:14px;"></i>文件区</button>
+          <button class="flex-1 flex items-center justify-center gap-1.5 py-3 text-sm text-[#1e3a8a] border-b-2 border-[#1e3a8a] font-medium"><i data-lucide="message-square" style="width:14px;height:14px;"></i>工作区</button>
+        </div>
+
+        <!-- 资料文件夹 → 专属 Agent → 对话 -->
+        <div class="px-3 py-4 flex-1 overflow-y-auto">
+          <div class="mb-3 flex items-center justify-between px-1"><span class="text-xs font-semibold uppercase tracking-[.12em] text-slate-400">我的 Agents</span><button onclick="newConversation()" class="grid h-6 w-6 place-items-center rounded-md text-lg text-slate-400 hover:bg-blue-50 hover:text-[#1e3a8a]">+</button></div>
+          <div class="mb-3 flex items-center gap-2 px-2 text-xs font-medium text-slate-500"><i data-lucide="folder" class="text-[#3b5fb0]" style="width:15px;height:15px;"></i>学习资料 <span class="ml-auto text-slate-400">3 个 Agent</span></div>
+
+          <button class="agent-row flex w-full items-center gap-1 rounded-lg bg-blue-50 px-2 py-2 text-left text-sm font-medium text-[#1e3a8a]" data-agent-tree="database" aria-expanded="true">
+            <i data-lucide="chevron-right" class="tree-caret shrink-0 text-blue-400" style="width:14px;height:14px;"></i><i data-lucide="bot" style="width:16px;height:16px;"></i><span class="truncate">数据库课程 Agent</span><span class="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+          </button>
+          <div id="agent-tree-database" class="chat-list">
+            <button data-session="数据库 SQL 语法疑问" data-agent="数据库课程 Agent" class="chat-item chat-row relative flex w-full items-center gap-2 rounded-md bg-blue-50/70 px-2 py-1.5 text-left text-xs font-medium text-slate-700"><i data-lucide="message-square" style="width:13px;height:13px;"></i><span class="truncate">数据库 SQL 语法疑问</span></button>
+            <button data-session="第 6 章复习提纲" data-agent="数据库课程 Agent" class="chat-item chat-row relative flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-slate-500"><i data-lucide="message-square" style="width:13px;height:13px;"></i><span class="truncate">第 6 章复习提纲</span></button>
+          </div>
+
+          <button class="agent-row flex w-full items-center gap-1 rounded-lg px-2 py-2 text-left text-sm font-medium text-slate-700" data-agent-tree="calculus" aria-expanded="false">
+            <i data-lucide="chevron-right" class="tree-caret shrink-0 text-slate-400" style="width:14px;height:14px;"></i><i data-lucide="bot" class="text-slate-500" style="width:16px;height:16px;"></i><span class="truncate">微积分学习 Agent</span><span class="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+          </button>
+          <div id="agent-tree-calculus" class="chat-list hidden"><button data-session="微积分极限定义" data-agent="微积分学习 Agent" class="chat-item chat-row relative flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-slate-500"><i data-lucide="message-square" style="width:13px;height:13px;"></i><span class="truncate">微积分极限定义</span></button></div>
+
+          <button class="agent-row flex w-full items-center gap-1 rounded-lg px-2 py-2 text-left text-sm font-medium text-slate-700" data-agent-tree="scan" aria-expanded="false">
+            <i data-lucide="chevron-right" class="tree-caret shrink-0 text-slate-400" style="width:14px;height:14px;"></i><i data-lucide="bot" class="text-slate-500" style="width:16px;height:16px;"></i><span class="truncate">扫描件整理 Agent</span><span class="ml-auto h-1.5 w-1.5 rounded-full bg-slate-300"></span>
+          </button>
+          <div id="agent-tree-scan" class="chat-list hidden"><button data-session="OCR 校对任务" data-agent="扫描件整理 Agent" class="chat-item chat-row relative flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-slate-500"><i data-lucide="message-square" style="width:13px;height:13px;"></i><span class="truncate">OCR 校对任务</span></button></div>
+
+          <div class="my-4 border-t border-slate-100"></div>
+          <div class="mb-2 flex items-center gap-2 px-2 text-xs font-medium text-slate-500"><i data-lucide="folder" class="text-slate-400" style="width:15px;height:15px;"></i>项目文档</div>
+          <button data-session="产品方案讨论" data-agent="产品方案 Agent" class="chat-item agent-row flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-slate-600"><i data-lucide="bot" class="text-slate-500" style="width:16px;height:16px;"></i><span class="truncate">产品方案 Agent</span><span class="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-500"></span></button>
+        </div>
+
+        <div class="p-3 border-t border-slate-100">
+          <button onclick="newConversation()" class="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-blue-800 hover:bg-blue-50 rounded-lg">
+            <i data-lucide="plus" style="width:14px;height:14px;stroke-width:2;"></i>
+            <span>新对话</span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- 主区: Chat -->
+      <main class="flex-1 flex flex-col bg-white">
+        <!-- Session Header -->
+        <div class="h-14 border-b border-slate-100 flex items-center px-5 gap-3">
+          <button class="flex items-center gap-1.5 hover:bg-slate-50 px-2 py-1 rounded-md">
+            <span id="session-title" class="text-slate-900 text-sm font-medium">数据库 SQL 语法疑问</span>
+            <i data-lucide="chevron-down" class="text-slate-400" style="width:14px;height:14px;stroke-width:2;"></i>
+          </button>
+          <div class="flex-1 flex items-center gap-1.5 text-xs text-slate-400">
+            <i data-lucide="file-text" style="width:12px;height:12px;stroke-width:2;"></i>
+            <span id="agent-name">数据库课程 Agent · 关联：数据库系统概念.pdf</span>
+          </div>
+          <button onclick="newConversation()" title="新建会话" class="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500">
+            <i data-lucide="plus" style="width:16px;height:16px;stroke-width:2;"></i>
+          </button>
+          <button onclick="clearConversation()" title="清空会话" class="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500">
+            <i data-lucide="trash-2" style="width:16px;height:16px;stroke-width:2;"></i>
+          </button>
+        </div>
+
+        <!-- 消息流 -->
+        <div id="message-list" class="flex-1 overflow-y-auto p-6 space-y-5">
+
+          <!-- AI 消息 (左侧白卡) -->
+          <div class="anim-fade-up flex gap-3 max-w-3xl" style="animation-delay:0ms;">
+            <div class="w-8 h-8 rounded-full shrink-0 flex items-center justify-center" style="background: #1e3a8a;">
+              <i data-lucide="sparkles" class="text-white" style="width:14px;height:14px;stroke-width:2;"></i>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-2xl rounded-tl-md px-4 py-3 shadow-sm">
+              <p class="text-slate-700 text-sm leading-relaxed">你好! 我是 DocuMate 助手. 想问数据库 SQL 的什么问题?</p>
+            </div>
+          </div>
+
+          <!-- 用户消息 (右侧渐变气泡) -->
+          <div class="anim-fade-up flex gap-3 max-w-3xl ml-auto justify-end" style="animation-delay:80ms;">
+            <div class="rounded-2xl rounded-tr-md px-4 py-3 shadow-md max-w-md"
+                 style="background: #1e3a8a;">
+              <p class="text-white text-sm leading-relaxed">关系代数里的 σ (sigma) 是什么意思? 详细解释一下, 用我文档里的例子</p>
+            </div>
+            <div class="w-8 h-8 rounded-full bg-slate-200 shrink-0 flex items-center justify-center text-slate-600 text-xs font-semibold">Q</div>
+          </div>
+
+          <!-- 工具调用 (居中卡片) -->
+          <div class="anim-fade-up flex justify-center" style="animation-delay:160ms;">
+            <div class="tool-card border border-blue-100 rounded-xl px-4 py-2.5 max-w-md flex items-center gap-3">
+              <i data-lucide="wrench" class="text-blue-600" style="width:16px;height:16px;stroke-width:1.8;"></i>
+              <div class="flex-1 min-w-0">
+                <div class="text-xs font-medium text-slate-700">调用工具: <code class="text-blue-700 bg-white px-1.5 py-0.5 rounded text-[11px]">search_kb</code></div>
+                <div class="text-[11px] text-slate-500 truncate">query: "关系代数 选择 sigma"</div>
+              </div>
+              <i data-lucide="check-circle-2" class="text-emerald-600 shrink-0" style="width:16px;height:16px;stroke-width:1.8;"></i>
+            </div>
+          </div>
+
+          <!-- AI 回复 (含工具结果的) -->
+          <div class="anim-fade-up flex gap-3 max-w-3xl" style="animation-delay:240ms;">
+            <div class="w-8 h-8 rounded-full shrink-0 flex items-center justify-center" style="background: #1e3a8a;">
+              <i data-lucide="sparkles" class="text-white" style="width:14px;height:14px;stroke-width:2;"></i>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-2xl rounded-tl-md px-4 py-3 shadow-sm max-w-2xl">
+              <p class="text-slate-700 text-sm leading-relaxed mb-2">
+                关系代数中的 <code class="bg-slate-100 px-1.5 py-0.5 rounded text-blue-700 text-[12px]">σ (sigma)</code> 是<strong>选择运算</strong> (Selection), 用于从关系中筛选出满足指定条件的元组.
+              </p>
+              <p class="text-slate-700 text-sm leading-relaxed mb-2">你文档第 6 章的例子:</p>
+              <div class="bg-slate-50 border border-slate-100 rounded-md p-3 font-mono text-xs text-slate-700 mb-2">σ<sub>department='Computer Sci.'</sub>(instructor)</div>
+              <p class="text-slate-700 text-sm leading-relaxed">这个表达式从 <code class="text-blue-600">instructor</code> 关系中选出所有部门为 'Computer Sci.' 的元组.</p>
+            </div>
+          </div>
+
+          <!-- 用户继续问 -->
+          <div class="anim-fade-up flex gap-3 max-w-3xl ml-auto justify-end" style="animation-delay:320ms;">
+            <div class="rounded-2xl rounded-tr-md px-4 py-3 shadow-md max-w-md" style="background: #1e3a8a;">
+              <p class="text-white text-sm leading-relaxed">把刚才的解释生成一个出版级 PDF, 给我导出</p>
+            </div>
+            <div class="w-8 h-8 rounded-full bg-slate-200 shrink-0 flex items-center justify-center text-slate-600 text-xs font-semibold">Q</div>
+          </div>
+
+          <!-- 工具调用: 进行中 -->
+          <div class="anim-fade-up flex justify-center" style="animation-delay:400ms;">
+            <div class="tool-card border border-blue-100 rounded-xl px-4 py-2.5 max-w-md flex items-center gap-3">
+              <i data-lucide="loader-2" class="text-blue-600 spin" style="width:16px;height:16px;stroke-width:1.8;"></i>
+              <div class="flex-1 min-w-0">
+                <div class="text-xs font-medium text-slate-700">调用工具: <code class="text-blue-700 bg-white px-1.5 py-0.5 rounded text-[11px]">render_pdf</code></div>
+                <div class="text-[11px] text-slate-500">正在 pandoc + xelatex 渲染...</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- 底部输入区 -->
+        <div class="p-4 border-t border-slate-100 bg-white">
+          <div class="max-w-3xl mx-auto flex items-end gap-2.5">
+            <button onclick="prototypeToast('已打开附件选择器')" class="p-2.5 text-slate-500 hover:bg-slate-100 rounded-lg transition">
+              <i data-lucide="paperclip" style="width:18px;height:18px;stroke-width:1.8;"></i>
+            </button>
+            <div class="flex-1 relative">
+              <textarea id="chat-input" rows="1" placeholder="问 DocuMate 任何事..."
+                        class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm resize-none
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                               max-h-32 transition-all duration-200"></textarea>
+            </div>
+            <button id="send-button" onclick="sendMessage()" class="send-btn w-10 h-10 rounded-full text-white flex items-center justify-center shadow-md shrink-0"
+                    style="background: #1e3a8a;">
+              <i data-lucide="send" style="width:16px;height:16px;stroke-width:2;"></i>
+            </button>
+          </div>
+          <div class="text-center text-[10px] text-slate-400 mt-2 font-mono">⏎ 发送 · Shift+⏎ 换行 · Cmd+/ 切换工具面板</div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    lucide.createIcons();
+    const input = document.getElementById('chat-input');
+    const messageList = document.getElementById('message-list');
+    input.addEventListener('input', () => {
+      input.style.height = 'auto';
+      input.style.height = `${Math.min(input.scrollHeight, 128)}px`;
+    });
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+      }
+    });
+    function sendMessage() {
+      const message = input.value.trim();
+      if (!message) {
+        prototypeToast('先输入一条消息');
+        return;
+      }
+      const row = document.createElement('div');
+      row.className = 'anim-fade-up flex gap-3 max-w-3xl ml-auto justify-end';
+      row.innerHTML = `<div class="rounded-2xl rounded-tr-md px-4 py-3 shadow-sm max-w-md bg-blue-900"><p class="text-white text-sm leading-relaxed"></p></div><div class="w-8 h-8 rounded-full bg-slate-200 shrink-0 flex items-center justify-center text-slate-600 text-xs font-semibold">Q</div>`;
+      row.querySelector('p').textContent = message;
+      messageList.appendChild(row);
+      input.value = '';
+      input.style.height = 'auto';
+      messageList.scrollTop = messageList.scrollHeight;
+      prototypeToast('消息已发送');
+    }
+    function newConversation() {
+      input.value = '';
+      input.focus();
+      document.getElementById('session-title').textContent = '新对话';
+      prototypeToast('已新建对话');
+    }
+    function clearConversation() {
+      messageList.innerHTML = '<div class="h-full grid place-items-center text-sm text-slate-400">会话已清空，可以开始新问题</div>';
+      prototypeToast('会话已清空');
+    }
+    document.querySelectorAll('.agent-row[data-agent-tree]').forEach(agent => agent.addEventListener('click', () => {
+      const expanded = agent.getAttribute('aria-expanded') === 'true';
+      agent.setAttribute('aria-expanded', String(!expanded));
+      document.getElementById(`agent-tree-${agent.dataset.agentTree}`).classList.toggle('hidden', expanded);
+    }));
+    document.querySelectorAll('.chat-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.chat-item').forEach(row => {
+          row.classList.remove('bg-blue-50/70', 'font-medium', 'text-slate-700');
+          row.classList.add('text-slate-500');
+        });
+        item.classList.add('bg-blue-50/70', 'font-medium', 'text-slate-700');
+        item.classList.remove('text-slate-500');
+        document.getElementById('session-title').textContent = item.dataset.session;
+        document.getElementById('agent-name').textContent = `${item.dataset.agent} · 已切换对话`;
+        prototypeToast(`已切换到 ${item.dataset.agent}`);
+      });
+    });
+  </script>
+  <script src="prototype-kit.js"></script>
+</body>
+</html>

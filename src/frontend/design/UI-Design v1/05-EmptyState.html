@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuMate · 文件区</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { --brand: #1e3a8a; --brand-soft: #3b5fb0; }
+    html, body { height: 100%; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; -webkit-font-smoothing: antialiased; overflow: hidden; }
+    @keyframes fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .enter { animation: fade-up 420ms cubic-bezier(.2,0,0,1) backwards; }
+    .delay-1 { animation-delay: 80ms; } .delay-2 { animation-delay: 160ms; }
+    .nav-tab { color: #64748b; border-bottom: 2px solid transparent; transition: color 160ms, border-color 160ms, background 160ms; }
+    .nav-tab:hover { color: #1e3a8a; background: #f8fafc; }
+    .nav-tab.active { color: #1e3a8a; border-bottom-color: #1e3a8a; }
+    .folder-surface { position: relative; border: 1px solid #dbe7fb; border-radius: 0 18px 18px 18px; background: #f8fbff; }
+    .folder-surface::before { content: ""; position: absolute; top: -17px; left: -1px; width: 112px; height: 18px; border: 1px solid #dbe7fb; border-bottom: 0; border-radius: 11px 11px 0 0; background: #f8fbff; }
+    .drop-zone { transition: border-color 180ms, background 180ms, transform 180ms; }
+    .drop-zone:hover, .drop-zone.dragging { border-color: #1e3a8a; background: #eff6ff; transform: translateY(-2px); }
+    .quick-button { transition: transform 160ms, box-shadow 160ms, background 160ms; }
+    .quick-button:hover { transform: translateY(-1px); box-shadow: 0 8px 16px rgba(30,58,138,.16); background: #173276; }
+    .tree-folder, .tree-file { transition: background 150ms, color 150ms; }
+    .tree-folder:hover, .tree-file:hover { background: #f8fafc; }
+    .tree-folder[aria-expanded="true"] .tree-caret { transform: rotate(90deg); }
+    .tree-caret { transition: transform 160ms; }
+    .tree-children { position: relative; margin: 2px 0 6px 18px; padding-left: 12px; }
+    .tree-children::before { content: ""; position: absolute; left: 0; top: 0; bottom: 9px; width: 1px; background: #e2e8f0; }
+    .tree-file::before { content: ""; position: absolute; left: -12px; top: 50%; width: 8px; height: 1px; background: #e2e8f0; }
+  </style>
+</head>
+<body class="bg-slate-50">
+  <div class="flex h-screen flex-col">
+    <header class="h-14 shrink-0 border-b border-slate-200 bg-white px-5 flex items-center gap-4">
+      <a href="05-EmptyState.html" class="flex items-center gap-2.5 shrink-0" aria-label="DocuMate 首页">
+        <img class="h-8 w-8 rounded-[10px] shadow-sm" src="../../../../build/icons/macos/documate-app-icon-1024.png" alt="DocuMate 图标">
+        <span class="text-[16px] font-semibold tracking-[-0.025em] text-slate-900">DocuMate</span>
+      </a>
+      <div class="h-5 w-px bg-slate-200"></div>
+      <div class="flex min-w-0 flex-1 items-center gap-2 text-xs text-slate-500">
+        <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 0 1 2-2h4l1.7 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7.5z"/></svg>
+        <span>学习资料</span><svg class="h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="font-medium text-slate-700">文件区</span>
+      </div>
+      <button onclick="location.href='03-WelcomeModal.html'" title="公告" class="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><svg class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="m3 11 18-5v12l-18-4v-3Z"/><path d="M11.5 16.5a3 3 0 1 1-5.8-1.6"/></svg></button>
+      <button onclick="location.href='08-SettingsDrawer.html'" title="设置" class="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><svg class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5v.2a2 2 0 0 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 0 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 0 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z"/></svg></button>
+      <button onclick="location.href='08-SettingsDrawer.html'" class="ml-1 grid h-8 w-8 place-items-center rounded-full bg-[#1e3a8a] text-xs font-semibold text-white">Q</button>
+    </header>
+
+    <div class="flex min-h-0 flex-1">
+      <aside class="flex w-[280px] shrink-0 flex-col border-r border-slate-200 bg-white">
+        <div class="relative border-b border-slate-100 p-3">
+          <button id="workspace-trigger" class="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-100">
+            <span class="flex min-w-0 items-center gap-2"><svg class="h-4 w-4 shrink-0 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 0 1 2-2h4l1.7 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7.5z"/></svg><span id="workspace-name" class="truncate">~/Documents/学习</span></span>
+            <svg class="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg>
+          </button>
+          <div id="workspace-menu" class="hidden absolute left-3 right-3 top-[52px] z-20 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-slate-900/10">
+            <button data-workspace="~/Documents/学习" class="workspace-option w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-blue-50">~/Documents/学习</button>
+            <button data-workspace="~/Documents/项目" class="workspace-option w-full rounded-lg px-3 py-2 text-left text-sm text-slate-600 hover:bg-blue-50">~/Documents/项目</button>
+          </div>
+        </div>
+
+        <nav class="flex border-b border-slate-200" aria-label="主功能区">
+          <a href="05-EmptyState.html" class="nav-tab active flex flex-1 items-center justify-center gap-1.5 py-3 text-sm font-medium"><svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 0 1 2-2h4l1.7 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7.5z"/></svg>文件区</a>
+          <a href="06-MainWorkspace.html" class="nav-tab flex flex-1 items-center justify-center gap-1.5 py-3 text-sm font-medium"><svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 10h8M8 14h5"/></svg>工作区</a>
+        </nav>
+
+        <div class="flex-1 overflow-y-auto px-3 py-5">
+          <div class="mb-3 flex items-center justify-between px-1">
+            <span class="text-xs font-semibold uppercase tracking-[.12em] text-slate-400">文件夹</span>
+            <button onclick="prototypeToast('已打开新建文件夹窗口')" title="新建文件夹" class="grid h-6 w-6 place-items-center rounded-md text-lg leading-none text-slate-400 hover:bg-blue-50 hover:text-[#1e3a8a]">+</button>
+          </div>
+
+          <button onclick="prototypeToast('当前正在查看全部文件')" class="mb-2 flex w-full items-center gap-2 rounded-lg bg-blue-50 px-3 py-2.5 text-left text-sm font-medium text-[#1e3a8a]">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 0 1 2-2h4l1.7 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7.5z"/></svg>全部文件 <span class="ml-auto text-xs font-normal text-blue-400">0</span>
+          </button>
+
+          <div class="space-y-0.5">
+            <div>
+              <button class="tree-folder flex w-full items-center gap-1 rounded-lg px-2 py-2 text-left text-sm font-medium text-slate-700" data-tree="study" aria-expanded="true">
+                <svg class="tree-caret h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+                <svg class="h-4 w-4 shrink-0 text-[#3b5fb0]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 0 1 2-2h4l1.7 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7.5z"/></svg>
+                <span class="truncate">学习资料</span><span class="ml-auto text-xs font-normal text-slate-400">3</span>
+              </button>
+              <div id="tree-study" class="tree-children">
+                <button onclick="prototypeToast('已打开：数据库系统概念.pdf')" class="tree-file relative flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-slate-600"><svg class="h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="truncate">数据库系统概念.pdf</span></button>
+                <button onclick="prototypeToast('已打开：微积分笔记.docx')" class="tree-file relative flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-slate-600"><svg class="h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="truncate">微积分笔记.docx</span></button>
+                <button onclick="prototypeToast('已打开：手写笔记扫描.jpg')" class="tree-file relative flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-slate-600"><svg class="h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="truncate">手写笔记扫描.jpg</span></button>
+              </div>
+            </div>
+
+            <div>
+              <button class="tree-folder flex w-full items-center gap-1 rounded-lg px-2 py-2 text-left text-sm font-medium text-slate-700" data-tree="projects" aria-expanded="false">
+                <svg class="tree-caret h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+                <svg class="h-4 w-4 shrink-0 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 0 1 2-2h4l1.7 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7.5z"/></svg>
+                <span class="truncate">项目文档</span><span class="ml-auto text-xs font-normal text-slate-400">2</span>
+              </button>
+              <div id="tree-projects" class="tree-children hidden">
+                <button onclick="prototypeToast('已打开：产品需求文档.pdf')" class="tree-file relative flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-slate-600"><svg class="h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="truncate">产品需求文档.pdf</span></button>
+                <button onclick="prototypeToast('已打开：设计参考')" class="tree-file relative flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-slate-600"><svg class="h-3.5 w-3.5 shrink-0 text-[#3b5fb0]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 0 1 2-2h4l1.7 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7.5z"/></svg><span class="truncate">设计参考</span></button>
+              </div>
+            </div>
+
+            <div>
+              <button class="tree-folder flex w-full items-center gap-1 rounded-lg px-2 py-2 text-left text-sm font-medium text-slate-700" data-tree="archive" aria-expanded="false">
+                <svg class="tree-caret h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+                <svg class="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 0 1 2-2h4l1.7 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7.5z"/></svg>
+                <span class="truncate">归档</span><span class="ml-auto text-xs font-normal text-slate-400">8</span>
+              </button>
+              <div id="tree-archive" class="tree-children hidden"><div class="px-2 py-1.5 text-xs text-slate-400">8 个已归档文件</div></div>
+            </div>
+          </div>
+
+          <div class="mt-5 border-t border-slate-100 pt-4">
+            <button onclick="prototypeToast('已筛选最近导入的文件')" class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-slate-500 hover:bg-slate-50"><svg class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8v4l2.5 2.5"/><circle cx="12" cy="12" r="9"/></svg>最近导入</button>
+          </div>
+        </div>
+
+        <div class="border-t border-slate-100 p-3">
+          <button onclick="prototypeToast('已打开文件选择器')" class="quick-button flex w-full items-center justify-center gap-2 rounded-lg bg-[#1e3a8a] px-3 py-2.5 text-sm font-medium text-white"><svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>导入文件</button>
+        </div>
+      </aside>
+
+      <main class="flex min-w-0 flex-1 flex-col items-center justify-center px-8 py-10">
+        <div class="w-full max-w-2xl text-center">
+          <div class="enter mb-10"><div class="mx-auto mb-6 grid h-16 w-20 place-items-center rounded-t-2xl rounded-b-lg bg-blue-100 text-[#1e3a8a]"><svg class="h-9 w-9" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 0 1 2-2h4l1.7 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7.5z"/><path d="M12 10v6m-3-3 3-3 3 3"/></svg></div><h1 class="text-[32px] font-bold tracking-[-.04em] text-slate-900">把文件放进你的工作区</h1><p class="mt-3 text-[15px] leading-7 text-slate-500">导入本地资料后，再到工作区用自然语言安排阅读、搜索、整理或生成任务。</p></div>
+          <button id="drop-zone" onclick="prototypeToast('已打开文件选择器')" class="drop-zone folder-surface enter delay-1 w-full p-8 text-center"><div class="relative z-10"><div class="text-sm font-semibold text-slate-800">拖放文件到这里，或点击导入</div><div class="mt-2 text-xs text-slate-500">支持 PDF、Word、图片和扫描件</div><span class="mt-5 inline-flex items-center gap-2 rounded-lg bg-white px-3.5 py-2 text-sm font-semibold text-[#1e3a8a] shadow-sm ring-1 ring-blue-100">选择文件 <span>→</span></span></div></button>
+          <p class="enter delay-2 mt-6 text-xs text-slate-400">文件默认留在本地工作区，按需调用 AI 服务</p>
+        </div>
+      </main>
+    </div>
+  </div>
+  <script>
+    const workspaceTrigger = document.getElementById('workspace-trigger');
+    const workspaceMenu = document.getElementById('workspace-menu');
+    workspaceTrigger.addEventListener('click', () => workspaceMenu.classList.toggle('hidden'));
+    document.querySelectorAll('.workspace-option').forEach(option => option.addEventListener('click', () => {
+      document.getElementById('workspace-name').textContent = option.dataset.workspace;
+      workspaceMenu.classList.add('hidden');
+      prototypeToast(`已切换到「${option.dataset.workspace}」`);
+    }));
+    document.querySelectorAll('.tree-folder').forEach(folder => folder.addEventListener('click', () => {
+      const isExpanded = folder.getAttribute('aria-expanded') === 'true';
+      folder.setAttribute('aria-expanded', String(!isExpanded));
+      document.getElementById(`tree-${folder.dataset.tree}`).classList.toggle('hidden', isExpanded);
+    }));
+    const dropZone = document.getElementById('drop-zone');
+    ['dragenter', 'dragover'].forEach(type => dropZone.addEventListener(type, event => { event.preventDefault(); dropZone.classList.add('dragging'); }));
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragging'));
+    dropZone.addEventListener('drop', event => { event.preventDefault(); dropZone.classList.remove('dragging'); prototypeToast(`已接收 ${event.dataTransfer.files.length || 1} 个文件`); });
+  </script>
+  <script src="prototype-kit.js"></script>
+</body>
+</html>

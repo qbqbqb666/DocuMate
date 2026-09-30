@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuMate · 机器人场景 (真图版)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400..900,0..100&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --brand: #1e3a8a;
+      --brand-soft: #3b5fb0;
+      --brand-tint: #a5b8e1;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+      background: #fafafa;
+      -webkit-font-smoothing: antialiased;
+    }
+    .fraunces {
+      font-family: 'Fraunces', serif;
+      font-variation-settings: 'SOFT' 100, 'opsz' 144;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+    }
+
+    /* ========== 字标 ========== */
+    .wordmark {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0;
+      line-height: 1;
+      font-size: 88px;
+    }
+    .wordmark .d-svg { display: inline-block; margin-right: -0.06em; }
+
+    /* ========== 机器人场景容器 ========== */
+    .scene {
+      position: relative;
+      width: 100%;
+      height: 480px;
+    }
+
+    /* ========== 机器人通用 ========== */
+    .robot {
+      position: absolute;
+      cursor: pointer;
+      transition: transform 320ms cubic-bezier(0.2, 0, 0, 1);
+      will-change: transform;
+    }
+    .robot img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      opacity: 0;
+      transition: opacity 320ms ease-out;
+      pointer-events: none;
+      filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.22));
+    }
+    /* idle img 撑起容器尺寸 (用 relative 而非 absolute) */
+    .robot img.state-idle { position: relative; }
+
+    /* ========== 群组布局 v2 — 拉开距离, 形成"三个工位" 错落 ==========
+       Robot 1 大前 (左下) → Robot 2 中后 (中上) → Robot 3 小 (右下后)
+       Robot 3 大幅往右下走, 形成对角三角群组
+    ========== */
+    .robot-1 { left:  4%; top: 48%; width: 230px; height: 230px; z-index: 3; }
+    .robot-2 { left: 28%; top: 28%; width: 180px; height: 180px; z-index: 2; }
+    .robot-3 { left: 53%; top: 54%; width: 155px; height: 155px; z-index: 1; }
+
+    /* ========== 状态切换 (opacity, 真图直接换) ========== */
+    .scene.idle  .robot img.state-idle  { opacity: 1; }
+    .scene.peek  .robot img.state-idle  { opacity: 0; }
+    .scene.peek  .robot img.state-peek  { opacity: 1; }
+    .scene.smile .robot img.state-idle  { opacity: 0; }
+    .scene.smile .robot img.state-smile { opacity: 1; }
+
+    /* ========== idle 状态 · 各自轻微浮动 (像呼吸) ========== */
+    @keyframes idle-bob-1 {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-4px); }
+    }
+    @keyframes idle-bob-2 {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-3px) rotate(0.5deg); }
+    }
+    @keyframes idle-bob-3 {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-5px); }
+    }
+    .scene.idle .robot-1 { animation: idle-bob-1 3.5s ease-in-out infinite; }
+    .scene.idle .robot-2 { animation: idle-bob-2 4s   ease-in-out infinite 0.5s; }
+    .scene.idle .robot-3 { animation: idle-bob-3 3.2s ease-in-out infinite 0.8s; }
+
+    /* ========== peek 状态 · 真图本身已是伸脖子姿势,
+       加一个轻微激动颤抖, 表达"好奇盯着看"
+    ========== */
+    @keyframes peek-tremble-1 {
+      0%, 100% { transform: translate(0, 0); }
+      50%      { transform: translate(2px, -2px) rotate(0.5deg); }
+    }
+    @keyframes peek-tremble-2 {
+      0%, 100% { transform: translate(0, 0); }
+      50%      { transform: translate(-2px, -1px) rotate(-0.5deg); }
+    }
+    @keyframes peek-tremble-3 {
+      0%, 100% { transform: scale(1.28) translate(0, 0); }
+      50%      { transform: scale(1.28) translate(3px, -2px) rotate(0.8deg); }
+    }
+    .scene.peek .robot-1 { animation: peek-tremble-1 0.6s ease-in-out infinite; }
+    .scene.peek .robot-2 { animation: peek-tremble-2 0.7s ease-in-out infinite; }
+    .scene.peek .robot-3 { animation: peek-tremble-3 0.55s ease-in-out infinite; }
+
+    /* ========== smile 状态 · 真图本身已是装忙微笑,
+       加紧张抖动 + 微放大
+    ========== */
+    @keyframes smile-jitter-1 {
+      0%, 100% { transform: scale(1.04) translateY(-2px) rotate(0deg); }
+      50%      { transform: scale(1.04) translateY(-2px) rotate(-1deg); }
+    }
+    @keyframes smile-jitter-2 {
+      0%, 100% { transform: scale(1.03) rotate(-1deg); }
+      50%      { transform: scale(1.03) rotate(1deg); }
+    }
+    @keyframes smile-jitter-3 {
+      0%, 100% { transform: scale(1.05) rotate(1deg); }
+      50%      { transform: scale(1.05) rotate(-2deg); }
+    }
+    .scene.smile .robot-1 { animation: smile-jitter-1 0.45s ease-in-out infinite; filter: brightness(1.05); }
+    .scene.smile .robot-2 { animation: smile-jitter-2 0.5s  ease-in-out infinite; filter: brightness(1.05); }
+    .scene.smile .robot-3 { animation: smile-jitter-3 0.4s  ease-in-out infinite; filter: brightness(1.05); }
+    .scene.smile .robot img { filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.28)); }
+
+    /* ========== Hero 左侧背景 ========== */
+    .hero-bg {
+      background: linear-gradient(135deg, #1e3a8a 0%, #2a4a9e 50%, #1e3a8a 100%);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* ========== E. 浮动装饰元素 (4 个慢飘, 极轻不抢眼) ========== */
+    @keyframes float-slow-1 {
+      0%, 100% { transform: translate(0, 0); }
+      50%      { transform: translate(4px, -12px); }
+    }
+    @keyframes float-slow-2 {
+      0%, 100% { transform: translate(0, 0); }
+      50%      { transform: translate(-6px, -10px); }
+    }
+    @keyframes float-slow-3 {
+      0%, 100% { transform: translate(0, 0); }
+      50%      { transform: translate(3px, -8px); }
+    }
+    @keyframes float-slow-4 {
+      0%, 100% { transform: translate(0, 0); }
+      50%      { transform: translate(-4px, -6px); }
+    }
+    .float-1 { animation: float-slow-1  9s ease-in-out infinite; }
+    .float-2 { animation: float-slow-2 11s ease-in-out infinite 1s; }
+    .float-3 { animation: float-slow-3 13s ease-in-out infinite 2s; }
+    .float-4 { animation: float-slow-4 10s ease-in-out infinite 3s; }
+    .float-5 { animation: float-slow-1 14s ease-in-out infinite 4s; }
+    .hero-bg::before {
+      content: '';
+      position: absolute;
+      top: -100px;
+      right: -100px;
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(255,255,255,0.06), transparent 70%);
+      pointer-events: none;
+    }
+    .hero-bg::after {
+      content: '';
+      position: absolute;
+      bottom: -100px;
+      left: -100px;
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(255,255,255,0.05), transparent 70%);
+      pointer-events: none;
+    }
+
+    /* ========== 输入框 ========== */
+    .input-field { transition: all 200ms cubic-bezier(0.2, 0, 0, 1); }
+    .input-field:focus {
+      outline: none;
+      border-color: #1e3a8a;
+      box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.15);
+    }
+  </style>
+</head>
+<body class="min-h-screen py-6 px-6">
+
+  <div class="max-w-7xl mx-auto">
+
+    <!-- 顶部说明 -->
+    <div class="mb-5 bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+      <div class="text-emerald-900 text-sm font-semibold mb-1.5">✓ 已升级到真图版本</div>
+      <div class="text-emerald-800 text-sm leading-relaxed space-y-1">
+        <p>9 张真图全部接入 (3 角色 × 3 状态), 不再用 CSS transform 模拟. 状态切换是真实的图片切换 + 微动效叠加.</p>
+        <p class="mt-2"><strong>体验:</strong> ① 不操作看摸鱼/打哈欠/画画 ② 点密码框看 3 个伸脖子偷看 ③ 鼠标移机器人看 3 个装忙微笑</p>
+      </div>
+    </div>
+
+    <!-- 模拟登录页 -->
+    <div class="grid grid-cols-2 rounded-3xl overflow-hidden shadow-2xl border border-slate-200 bg-white min-h-[680px]">
+
+      <!-- 左侧 Hero -->
+      <div class="hero-bg flex flex-col justify-between p-10">
+
+        <!-- E. 浮动装饰 (避开主体, 慢飘, 极轻 opacity) -->
+        <div class="absolute inset-0 pointer-events-none overflow-hidden z-0">
+          <!-- sparkle 1: 字标右上 -->
+          <svg class="absolute float-1" style="top:8%; left:62%; width:14px; height:14px; opacity:0.22;"
+               viewBox="0 0 24 24" fill="white">
+            <path d="M12 3 L13.5 9 L20 10.5 L13.5 12 L12 18 L10.5 12 L4 10.5 L10.5 9 Z"/>
+          </svg>
+
+          <!-- 小文档 icon: 右上空白 -->
+          <svg class="absolute float-2" style="top:22%; right:8%; width:22px; height:22px; opacity:0.18;"
+               viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <path d="M14 2v6h6"/>
+            <line x1="9" y1="13" x2="15" y2="13"/>
+            <line x1="9" y1="17" x2="14" y2="17"/>
+          </svg>
+
+          <!-- 圆点群: 中右 -->
+          <div class="absolute float-3" style="top:42%; right:6%; opacity:0.22;">
+            <span class="block w-1.5 h-1.5 rounded-full bg-white"></span>
+            <span class="block w-1 h-1 rounded-full bg-white mt-1.5 ml-3"></span>
+            <span class="block w-1.5 h-1.5 rounded-full bg-white mt-1.5 ml-0.5"></span>
+          </div>
+
+          <!-- 小三角: 字标右下空白 -->
+          <svg class="absolute float-4" style="top:32%; left:64%; width:14px; height:14px; opacity:0.16;"
+               viewBox="0 0 24 24" fill="white">
+            <path d="M12 4 L20 18 L4 18 Z"/>
+          </svg>
+
+          <!-- 短线: 底部右上, 避开机器人和统计 -->
+          <div class="absolute float-5" style="top:68%; right:10%; width:40px; height:1.5px; opacity:0.18; background:white; border-radius:1px;"></div>
+        </div>
+
+
+        <!-- 顶部字标 -->
+        <div class="relative z-10">
+          <div class="wordmark">
+            <svg class="d-svg" viewBox="0 0 130 160" width="79" height="97" style="transform: translateY(14px);">
+              <defs>
+                <linearGradient id="page-grad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#dbe4f7"/>
+                  <stop offset="100%" stop-color="#6b85d4"/>
+                </linearGradient>
+              </defs>
+              <path d="M 18 6 L 18 154 L 64 154 C 102 154, 124 124, 124 80 C 124 36, 102 6, 64 6 Z" fill="#ffffff" />
+              <g transform="translate(36, 56)">
+                <path d="M 0 4 L 30 0 L 30 50 L 0 46 Z" fill="#1e3a8a"/>
+                <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#1e3a8a"/>
+                <line x1="30" y1="2" x2="30" y2="48" stroke="#ffffff" stroke-width="1" opacity="0.5"/>
+                <line x1="5" y1="14" x2="26" y2="12" stroke="#ffffff" stroke-width="0.9" opacity="0.55"/>
+                <line x1="5" y1="22" x2="27" y2="20" stroke="#ffffff" stroke-width="0.9" opacity="0.55"/>
+                <line x1="34" y1="12" x2="56" y2="14" stroke="#ffffff" stroke-width="0.9" opacity="0.55"/>
+                <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="url(#page-grad)" stroke="#1e3a8a" stroke-width="1.4" stroke-linejoin="round"/>
+              </g>
+            </svg>
+            <span class="fraunces text-white">o</span>
+            <span class="fraunces text-white">c</span>
+            <span class="fraunces text-white">u</span>
+            <span class="fraunces" style="color:#a5b8e1;">M</span>
+            <span class="fraunces" style="color:#a5b8e1;">a</span>
+            <span class="fraunces" style="color:#a5b8e1;">t</span>
+            <span class="fraunces" style="color:#a5b8e1;">e</span>
+          </div>
+          <!-- A. tagline -->
+          <p class="text-indigo-100/80 text-sm mt-4 ml-1 tracking-wider">
+            懂你文档的 AI 助手
+            <span class="text-indigo-300/40 mx-2">·</span>
+            <span class="text-indigo-200/60">数据本地优先</span>
+          </p>
+        </div>
+
+        <!-- 中部 · 机器人场景 -->
+        <div class="relative z-10 scene idle" id="scene">
+          <div class="robot robot-1" data-name="耳机款 Robot 1">
+            <img src="assets/robots/robot-1-idle.png"  class="state-idle"  alt="idle">
+            <img src="assets/robots/robot-1-peek.png"  class="state-peek"  alt="peek">
+            <img src="assets/robots/robot-1-smile.png" class="state-smile" alt="smile">
+          </div>
+          <div class="robot robot-2" data-name="眼镜款 Robot 2">
+            <img src="assets/robots/robot-2-idle.png"  class="state-idle"  alt="idle">
+            <img src="assets/robots/robot-2-peek.png"  class="state-peek"  alt="peek">
+            <img src="assets/robots/robot-2-smile.png" class="state-smile" alt="smile">
+          </div>
+          <div class="robot robot-3" data-name="盆栽款 Robot 3">
+            <img src="assets/robots/robot-3-idle.png"  class="state-idle"  alt="idle">
+            <img src="assets/robots/robot-3-peek.png"  class="state-peek"  alt="peek">
+            <img src="assets/robots/robot-3-smile.png" class="state-smile" alt="smile">
+          </div>
+
+        </div>
+
+        <!-- B. 底部 mini 统计 -->
+        <div class="relative z-10 flex items-center gap-3 text-xs">
+          <span class="flex items-center gap-1.5 text-emerald-300">
+            <span class="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
+            <span class="text-indigo-100/80">测试阶段</span>
+          </span>
+          <span class="text-indigo-300/30">·</span>
+          <span class="font-mono text-indigo-200/70">12k+ 文档</span>
+          <span class="text-indigo-300/30">·</span>
+          <span class="font-mono text-indigo-200/70">1.8M chunks</span>
+          <span class="text-indigo-300/30">·</span>
+          <span class="font-mono text-indigo-200/70">0 数据上云</span>
+        </div>
+      </div>
+
+      <!-- 右侧表单 (放大版 v2) -->
+      <div class="bg-white flex items-center justify-center p-14">
+        <div class="w-full max-w-md">
+          <h2 class="text-[42px] font-bold text-slate-900 mb-3 tracking-tight leading-tight">欢迎回来</h2>
+          <p class="text-slate-500 text-base mb-10">登录你的 DocuMate 账号, 继续跟 AI 处理文档</p>
+
+          <div class="space-y-5 mb-6">
+            <!-- 邮箱 -->
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-2">邮箱</label>
+              <div class="relative">
+                <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none"
+                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                </svg>
+                <input type="email" placeholder="you@example.com"
+                       class="input-field w-full pl-12 pr-4 py-3.5 border border-slate-200 rounded-xl text-base placeholder:text-slate-400">
+              </div>
+            </div>
+
+            <!-- 密码 + 忘记密码 -->
+            <div>
+              <div class="flex justify-between items-end mb-2">
+                <label class="block text-sm font-medium text-slate-700">密码</label>
+                <a href="#" class="text-xs text-indigo-700 hover:underline">忘记密码?</a>
+              </div>
+              <div class="relative">
+                <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none"
+                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <rect x="3" y="11" width="18" height="11" rx="2" stroke-width="1.8"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                        d="M7 11V7a5 5 0 0110 0v4"/>
+                </svg>
+                <input type="password" id="password-input" placeholder="••••••••"
+                       class="input-field w-full pl-12 pr-12 py-3.5 border border-slate-200 rounded-xl text-base placeholder:text-slate-400">
+                <button type="button" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition" title="显示密码">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M2.04 12.32a1 1 0 010-.64C3.42 7.51 7.36 4.5 12 4.5s8.58 3.01 9.96 7.18a1 1 0 010 .64C20.58 16.49 16.64 19.5 12 19.5s-8.58-3.01-9.96-7.18z"/>
+                    <circle cx="12" cy="12" r="3" stroke-width="1.8"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- 记住我 -->
+            <label class="flex items-center gap-2.5 cursor-pointer select-none group">
+              <input type="checkbox" class="w-[18px] h-[18px] rounded accent-indigo-700 cursor-pointer">
+              <span class="text-sm text-slate-600 group-hover:text-slate-800 transition">
+                记住我 <span class="text-slate-400">(30 天免登录)</span>
+              </span>
+            </label>
+          </div>
+
+          <!-- 登录按钮 -->
+          <button class="w-full py-4 rounded-xl text-white text-base font-semibold shadow-md transition hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0"
+                  style="background: #1e3a8a;">
+            登录
+          </button>
+
+          <!-- 分隔线 + 注册 -->
+          <div class="flex items-center my-7">
+            <div class="flex-1 h-px bg-slate-200"></div>
+            <span class="px-4 text-xs text-slate-400">还没账号?</span>
+            <div class="flex-1 h-px bg-slate-200"></div>
+          </div>
+
+          <a href="#" class="block w-full py-3.5 rounded-xl text-center text-slate-700 text-base font-medium border-2 border-slate-200 hover:border-indigo-300 hover:bg-slate-50 transition">
+            创建 DocuMate 账号
+          </a>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 底部 · 反馈说明 -->
+    <div class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+      <div class="bg-blue-50 border rounded-2xl p-5" style="border-color:#1e3a8a33;">
+        <div class="font-semibold mb-2" style="color:#1e3a8a;">✓ 这一版 (真图 v2)</div>
+        <ul class="text-slate-700 text-sm space-y-1 list-disc list-inside">
+          <li>9 张真图: 3 角色 × (idle/peek/smile)</li>
+          <li>状态切换用 opacity 平滑过渡 (320ms)</li>
+          <li>idle: 各自浮动呼吸 3-4s 循环</li>
+          <li>peek: 真图 + 激动微颤 0.6s 循环</li>
+          <li>smile: 真图 + 紧张抖动 + 微放大 + 提亮</li>
+          <li><strong>布局调整</strong>: 3 个紧凑站位, 大小有远近层次, 像在一块办公</li>
+          <li>Robot 1 (230px 大, 左前 z-3) → Robot 2 (180px 中, 中后 z-2) → Robot 3 (155px 小, 右后 z-1)</li>
+        </ul>
+      </div>
+
+      <div class="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+        <div class="font-semibold text-amber-900 mb-2">📋 你看完反馈</div>
+        <ul class="text-amber-800 text-sm space-y-1 list-disc list-inside">
+          <li>3 个机器人的位置 / 大小 / 距离, 现在像在一块办公吗?</li>
+          <li>idle 浮动节奏 (3-4s) 太慢 / 太快 / 刚好?</li>
+          <li>peek 微颤动效幅度合适吗?</li>
+          <li>smile 紧张抖动力度合适吗?</li>
+          <li>状态切换 320ms 速度 OK?</li>
+          <li>有没有图片大小不协调 (比如 Robot 2 peek 的望远镜超出容器)?</li>
+          <li>跟登录页主题契合度?</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-4 bg-slate-50 border border-slate-200 rounded-2xl p-5">
+      <div class="font-semibold text-slate-700 mb-2">🎬 下一步 (你拍板)</div>
+      <ul class="text-slate-700 text-sm space-y-1.5 leading-relaxed">
+        <li>✓ <strong>满意</strong> → 我把这个 hero 区集成到 LoginPage v2 + RegisterPage v2 完整页面里</li>
+        <li>↻ <strong>布局还要调</strong> → 跟我说具体哪个机器人要往哪移 / 多大</li>
+        <li>↻ <strong>动效要调</strong> → idle 慢一点 / peek 不要抖 / smile 抖更猛 / 等</li>
+        <li>↻ <strong>图片要换</strong> → 哪张姿势不对劲, 重新生</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <script>
+    const scene = document.getElementById('scene');
+    const passwordInput = document.getElementById('password-input');
+    const robots = document.querySelectorAll('.robot');
+
+    function setState(state) {
+      scene.classList.remove('idle', 'peek', 'smile');
+      scene.classList.add(state);
+    }
+
+    passwordInput.addEventListener('focus', () => {
+      if (!scene.classList.contains('smile')) setState('peek');
+    });
+    passwordInput.addEventListener('blur', () => {
+      if (!scene.classList.contains('smile')) setState('idle');
+    });
+
+    robots.forEach(r => {
+      r.addEventListener('mouseenter', () => setState('smile'));
+      r.addEventListener('mouseleave', () => {
+        const focused = document.activeElement === passwordInput;
+        setState(focused ? 'peek' : 'idle');
+      });
+    });
+  </script>
+
+</body>
+</html>

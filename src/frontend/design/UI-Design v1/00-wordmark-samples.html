@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuMate · 字标候选</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- 字体: Google Fonts 全量加载 6 种候选 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400..900,0..100&family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=DM+Serif+Display:ital@0;1&family=Outfit:wght@300..900&family=Sora:wght@300..800&family=Climate+Crisis:wght@100..400&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
+  <!-- 备用: Sentient / Pally from Fontshare -->
+  <link href="https://api.fontshare.com/v2/css?f[]=sentient@400,500,700,400i&f[]=satoshi@400,500,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: #fafafa;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* === 6 种字标候选 === */
+    .w-fraunces       { font-family: 'Fraunces', serif; font-variation-settings: 'SOFT' 100, 'opsz' 144; font-weight: 700; letter-spacing: -0.03em; }
+    .w-bricolage      { font-family: 'Bricolage Grotesque', sans-serif; font-variation-settings: 'opsz' 96, 'wdth' 100; font-weight: 700; letter-spacing: -0.04em; }
+    .w-dm-serif       { font-family: 'DM Serif Display', serif; font-weight: 400; letter-spacing: -0.02em; }
+    .w-outfit         { font-family: 'Outfit', sans-serif; font-weight: 700; letter-spacing: -0.04em; }
+    .w-cabinet        { font-family: 'Cabinet Grotesk', sans-serif; font-weight: 800; letter-spacing: -0.04em; }
+    .w-sentient       { font-family: 'Sentient', serif; font-weight: 500; letter-spacing: -0.02em; font-style: italic; }
+
+    .sample-card { transition: transform 200ms cubic-bezier(0.2,0,0,1), box-shadow 200ms; }
+    .sample-card:hover { transform: translateY(-4px); box-shadow: 0 16px 40px rgba(30, 58, 138, 0.12); }
+
+    /* 标记 "推荐" 角标 */
+    .badge-rec {
+      background: #1e3a8a;
+      color: white;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      letter-spacing: 0.05em;
+    }
+
+    /* 动效预览 (字母从右上掉下 + 滚动) */
+    @keyframes letter-fall {
+      0%   { opacity: 0; transform: translate(120px, -80px) rotate(45deg); }
+      40%  { opacity: 1; transform: translate(40px, -10px) rotate(15deg); }
+      70%  { transform: translate(0, 8px) rotate(0deg); }
+      85%  { transform: translate(0, -4px); }
+      100% { transform: translate(0, 0); }
+    }
+    .demo-anim span {
+      display: inline-block;
+      animation: letter-fall 1.5s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+    }
+    .demo-anim span:nth-child(1) { animation-delay: 0ms; }
+    .demo-anim span:nth-child(2) { animation-delay: 80ms; }
+    .demo-anim span:nth-child(3) { animation-delay: 160ms; }
+    .demo-anim span:nth-child(4) { animation-delay: 240ms; }
+    .demo-anim span:nth-child(5) { animation-delay: 320ms; }
+    .demo-anim span:nth-child(6) { animation-delay: 400ms; }
+    .demo-anim span:nth-child(7) { animation-delay: 480ms; }
+    .demo-anim span:nth-child(8) { animation-delay: 560ms; }
+  </style>
+</head>
+<body class="min-h-screen py-10 px-6">
+
+  <div class="max-w-6xl mx-auto">
+
+    <!-- 顶部说明 -->
+    <h1 class="text-3xl font-bold mb-2 tracking-tight" style="color:#1e3a8a;">DocuMate 字标候选 · 6 种字体方向</h1>
+    <p class="text-slate-600 text-sm mb-2">主色已锁定 <span class="font-mono bg-slate-100 px-1.5 py-0.5 rounded">#1e3a8a 深海蓝</span>. 现在只对比字体本身的性格.</p>
+    <p class="text-slate-500 text-xs mb-8">每张卡里我用同样的字号 / 同样的色, 唯一变量是字体. 滚到底有动效预览 (字母从右上掉下来撞 D).</p>
+
+    <!-- 字标样品 -->
+    <div class="space-y-5">
+
+      <!-- W1 · Fraunces -->
+      <div class="sample-card bg-white rounded-3xl border border-slate-200 p-10 relative">
+        <div class="absolute top-5 right-5 flex items-center gap-2">
+          <span class="badge-rec">推荐 #1</span>
+        </div>
+        <div class="w-fraunces text-[88px] leading-none mb-3" style="color:#1e3a8a;">DocuMate</div>
+        <div class="flex items-baseline gap-4">
+          <div class="text-base font-semibold text-slate-800">W1 · Fraunces (Soft 100, Optical 144)</div>
+          <div class="text-xs text-slate-500 font-mono">Google Fonts · variable</div>
+        </div>
+        <p class="text-sm text-slate-600 mt-2 max-w-2xl leading-relaxed">
+          现代 display serif, Soft 轴拉满 → 字母末端圆角. D 的圆肚 / M 的尖顶 / e 的弧线都很有个性.
+          <strong style="color:#1e3a8a;">极致适合做"字母独立滚动 / 撞击" 动效</strong>, 每个字母形态差异大.
+        </p>
+      </div>
+
+      <!-- W2 · Bricolage Grotesque -->
+      <div class="sample-card bg-white rounded-3xl border border-slate-200 p-10 relative">
+        <div class="absolute top-5 right-5 flex items-center gap-2">
+          <span class="badge-rec">推荐 #2</span>
+        </div>
+        <div class="w-bricolage text-[88px] leading-none mb-3" style="color:#1e3a8a;">DocuMate</div>
+        <div class="flex items-baseline gap-4">
+          <div class="text-base font-semibold text-slate-800">W2 · Bricolage Grotesque (96 / Bold)</div>
+          <div class="text-xs text-slate-500 font-mono">Google Fonts · variable (opsz + wdth)</div>
+        </div>
+        <p class="text-sm text-slate-600 mt-2 max-w-2xl leading-relaxed">
+          现代 geometric sans, 有微妙圆角. 没有衬线, 但通过笔画粗细变化和 D / o 字母的小细节
+          产生"活" 的感觉. 比 SF Pro / Inter 灵动一档, 但仍干净专业.
+        </p>
+      </div>
+
+      <!-- W3 · DM Serif Display -->
+      <div class="sample-card bg-white rounded-3xl border border-slate-200 p-10 relative">
+        <div class="w-dm-serif text-[88px] leading-none mb-3" style="color:#1e3a8a;">DocuMate</div>
+        <div class="flex items-baseline gap-4">
+          <div class="text-base font-semibold text-slate-800">W3 · DM Serif Display</div>
+          <div class="text-xs text-slate-500 font-mono">Google Fonts</div>
+        </div>
+        <p class="text-sm text-slate-600 mt-2 max-w-2xl leading-relaxed">
+          经典优雅 display serif, 高对比 (粗笔细笔反差大). 极致出版气, 像精装书封面.
+          但俏皮度一般, 偏 "严肃漂亮", 跟"灵动"目标有距离.
+        </p>
+      </div>
+
+      <!-- W4 · Outfit -->
+      <div class="sample-card bg-white rounded-3xl border border-slate-200 p-10 relative">
+        <div class="w-outfit text-[88px] leading-none mb-3" style="color:#1e3a8a;">DocuMate</div>
+        <div class="flex items-baseline gap-4">
+          <div class="text-base font-semibold text-slate-800">W4 · Outfit (Bold)</div>
+          <div class="text-xs text-slate-500 font-mono">Google Fonts</div>
+        </div>
+        <p class="text-sm text-slate-600 mt-2 max-w-2xl leading-relaxed">
+          圆润 geometric sans. D / o 字母圆肚饱满, 整体感觉柔和. 偏中性, 没特别个性, 但很耐看.
+          适合保守路线, 跟 "Apple HIG" 调性吻合.
+        </p>
+      </div>
+
+      <!-- W5 · Cabinet Grotesk -->
+      <div class="sample-card bg-white rounded-3xl border border-slate-200 p-10 relative">
+        <div class="w-cabinet text-[88px] leading-none mb-3" style="color:#1e3a8a;">DocuMate</div>
+        <div class="flex items-baseline gap-4">
+          <div class="text-base font-semibold text-slate-800">W5 · Cabinet Grotesk (Extrabold)</div>
+          <div class="text-xs text-slate-500 font-mono">Fontshare · 免费商用</div>
+        </div>
+        <p class="text-sm text-slate-600 mt-2 max-w-2xl leading-relaxed">
+          现代 grotesk, 粗粝有力, 字母末端有微妙倒角. 适合"独立工作室"调性.
+          比 Outfit 更有性格, 但偏冷, 灵动度中等.
+        </p>
+      </div>
+
+      <!-- W6 · Sentient italic -->
+      <div class="sample-card bg-white rounded-3xl border border-slate-200 p-10 relative">
+        <div class="w-sentient text-[100px] leading-none mb-3" style="color:#1e3a8a;">DocuMate</div>
+        <div class="flex items-baseline gap-4">
+          <div class="text-base font-semibold text-slate-800">W6 · Sentient (Italic, Medium)</div>
+          <div class="text-xs text-slate-500 font-mono">Fontshare · 免费商用</div>
+        </div>
+        <p class="text-sm text-slate-600 mt-2 max-w-2xl leading-relaxed">
+          现代 serif italic, 笔画带书写感, 极度灵动. D 的曲线 / e 的钩子 / a 的双层结构都很有戏.
+          像手写感的精致版. <strong style="color:#1e3a8a;">最 "俏皮" 的选项</strong>, 但 italic 可能偏文艺.
+        </p>
+      </div>
+    </div>
+
+    <!-- 动效预览 -->
+    <div class="mt-12 bg-white rounded-3xl border border-slate-200 p-10">
+      <div class="text-sm font-semibold text-slate-700 mb-1 uppercase tracking-wider">字母入场动效预览</div>
+      <p class="text-xs text-slate-500 mb-6">每个字母从右上方掉下来 + 旋转 + spring 弹一下 (你之前提的需求初版). 刷新页面重看.</p>
+
+      <div class="space-y-8">
+        <!-- Fraunces 动效 -->
+        <div>
+          <div class="text-xs text-slate-400 mb-1 font-mono">W1 · Fraunces</div>
+          <div class="w-fraunces demo-anim text-[88px] leading-none" style="color:#1e3a8a;">
+            <span>D</span><span>o</span><span>c</span><span>u</span><span>M</span><span>a</span><span>t</span><span>e</span>
+          </div>
+        </div>
+        <!-- Bricolage 动效 -->
+        <div>
+          <div class="text-xs text-slate-400 mb-1 font-mono">W2 · Bricolage Grotesque</div>
+          <div class="w-bricolage demo-anim text-[88px] leading-none" style="color:#1e3a8a;">
+            <span>D</span><span>o</span><span>c</span><span>u</span><span>M</span><span>a</span><span>t</span><span>e</span>
+          </div>
+        </div>
+        <!-- Sentient 动效 -->
+        <div>
+          <div class="text-xs text-slate-400 mb-1 font-mono">W6 · Sentient italic</div>
+          <div class="w-sentient demo-anim text-[100px] leading-none" style="color:#1e3a8a;">
+            <span>D</span><span>o</span><span>c</span><span>u</span><span>M</span><span>a</span><span>t</span><span>e</span>
+          </div>
+        </div>
+      </div>
+
+      <button onclick="location.reload()"
+              class="mt-6 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm rounded-lg transition">
+        ↻ 重播动效
+      </button>
+    </div>
+
+    <!-- 我的建议 -->
+    <div class="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div class="bg-blue-50 border rounded-2xl p-5" style="border-color:#1e3a8a33;">
+        <div class="flex items-center gap-2 font-semibold mb-2" style="color:#1e3a8a;">
+          <span>💡 我的偏好排序</span>
+        </div>
+        <div class="text-slate-700 text-sm leading-relaxed space-y-1.5">
+          <p><strong>🥇 W1 Fraunces (Soft)</strong> · 灵动 + 优雅 + 字母独立性强, 跟你"字母滚动撞 D" 动效绝配</p>
+          <p><strong>🥈 W2 Bricolage Grotesque</strong> · 现代干净路线, 不要 serif 想要 sans 时选这个</p>
+          <p><strong>🥉 W6 Sentient italic</strong> · 最俏皮, 但 italic 偏文艺, 适合"轻松文档助手"调性</p>
+        </div>
+      </div>
+
+      <div class="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+        <div class="flex items-center gap-2 text-amber-900 font-semibold mb-2">
+          <span>⚠️ 想清楚再选</span>
+        </div>
+        <div class="text-amber-800 text-sm leading-relaxed space-y-1.5">
+          <p><strong>有衬线 vs 无衬线</strong>: W1/W3/W6 有衬线 (serif), 出版气书卷气强; W2/W4/W5 无衬线 (sans), 现代科技感.</p>
+          <p><strong>俏皮度排序</strong>: W6 &gt; W1 &gt; W2 &gt; W4 &gt; W5 &gt; W3</p>
+          <p><strong>字母独立性 (动效适配)</strong>: W1 &gt; W6 &gt; W3 &gt; W4 &gt; W2 &gt; W5</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>

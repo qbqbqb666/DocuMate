@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuMate · 配置 API Key</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    :root { --brand: #1e3a8a; --brand-soft: #3b5fb0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    @keyframes overlay-in { 0%{opacity:0;} 100%{opacity:1;} }
+    @keyframes modal-in {
+      0%   { opacity: 0; transform: scale(0.96) translateY(8px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes bounce-in {
+      0%   { transform: scale(0); }
+      60%  { transform: scale(1.25); }
+      100% { transform: scale(1); }
+    }
+    .anim-overlay { animation: overlay-in 200ms ease-out backwards; }
+    .anim-modal   { animation: modal-in 320ms cubic-bezier(0.2, 0, 0, 1) backwards; }
+    .spin         { animation: spin 1s linear infinite; }
+    .bounce-in    { animation: bounce-in 400ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards; }
+
+    .btn-primary {
+      transition: transform 160ms cubic-bezier(0.2, 0, 0, 1),
+                  box-shadow 160ms cubic-bezier(0.2, 0, 0, 1),
+                  filter 160ms;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 24px -8px rgba(30, 58, 138, 0.4);
+      filter: brightness(1.08);
+    }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    input:focus { outline: none; }
+    .input-focus { transition: all 200ms cubic-bezier(0.2, 0, 0, 1); }
+    .input-focus:focus {
+      border-color: #1e3a8a;
+      box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.15);
+    }
+    .input-focus.error {
+      border-color: #f43f5e;
+      box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.15);
+    }
+
+    .mock-bg {
+      background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============ 模拟主界面背景 ============ -->
+  <div class="fixed inset-0 mock-bg overflow-hidden">
+    <header class="h-14 border-b border-slate-200 bg-white flex items-center px-5 gap-3">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-lg flex items-center justify-center" style="background: #1e3a8a;">
+          <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <path d="M14 2v6h6"/>
+          </svg>
+        </div>
+        <span class="text-slate-900 text-sm font-semibold">DocuMate</span>
+      </div>
+      <div class="flex-1"></div>
+      <div class="w-8 h-8 rounded-full text-white flex items-center justify-center text-xs font-semibold"
+           style="background: linear-gradient(135deg, #1e3a8a, #3b5fb0);">Q</div>
+    </header>
+    <div class="absolute inset-0 top-14 flex items-center justify-center text-slate-200 select-none pointer-events-none">
+      <div class="text-center">
+        <div class="text-7xl font-bold tracking-tight opacity-50">DocuMate</div>
+        <div class="text-sm mt-3 opacity-40">配置完 Key 后就能用 →</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 遮罩 + Modal ============ -->
+  <div class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm anim-overlay flex items-center justify-center p-4">
+
+    <div class="anim-modal bg-white rounded-3xl shadow-2xl p-8 w-full max-w-[520px]">
+
+      <!-- 顶部图标 -->
+      <div class="flex justify-center mb-5">
+        <div class="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
+          <svg class="w-8 h-8" style="color:#1e3a8a;" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <circle cx="7" cy="14" r="4.5"/>
+            <path d="M11.5 14h11.5l-2.5 2.5M19 14v3" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="7" cy="14" r="1" fill="currentColor"/>
+          </svg>
+        </div>
+      </div>
+
+      <h2 class="text-2xl font-bold text-center text-slate-900 mb-2 tracking-tight">配置 SiliconFlow API Key</h2>
+      <p class="text-slate-500 text-sm text-center mb-7 leading-relaxed">
+        你的 Key 用 <span class="font-mono text-slate-700">Fernet AES</span> 加密存储, 不出现在任何日志或客户端缓存
+      </p>
+
+      <!-- Key 输入 -->
+      <label class="block text-sm font-medium text-slate-700 mb-2">API Key</label>
+      <div class="relative mb-1.5">
+        <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <circle cx="7" cy="14" r="4.5"/>
+            <path d="M11.5 14h11.5l-2.5 2.5M19 14v3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <input id="key-input" type="password" placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxx"
+               class="input-focus w-full pl-12 pr-12 py-3.5 border border-slate-200 rounded-xl text-sm font-mono placeholder:text-slate-400">
+        <button type="button" id="eye-btn" onclick="toggleEye()" class="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-600 transition">
+          <svg id="eye-icon" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <path d="M2.04 12.32a1 1 0 010-.64C3.42 7.51 7.36 4.5 12 4.5s8.58 3.01 9.96 7.18a1 1 0 010 .64C20.58 16.49 16.64 19.5 12 19.5s-8.58-3.01-9.96-7.18z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+      </div>
+      <p class="text-slate-400 text-xs mb-4 pl-1">格式: 以 <span class="font-mono text-slate-600">sk-</span> 开头</p>
+
+      <!-- 外链 -->
+      <a href="https://cloud.siliconflow.cn/account/ak" target="_blank" rel="noreferrer" class="inline-flex items-center gap-1.5 text-sm hover:underline mb-5" style="color:#1e3a8a;">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+          <polyline points="15 3 21 3 21 9"/>
+          <line x1="10" y1="14" x2="21" y2="3"/>
+        </svg>
+        <span>如何获取 SiliconFlow API Key?</span>
+      </a>
+
+      <!-- 验证状态行 (3 态, 切换 demo) -->
+      <div id="status-loading" class="hidden mb-5 bg-slate-50 rounded-xl px-4 py-3 flex items-center gap-2.5">
+        <svg class="text-blue-600 spin shrink-0" style="width:20px;height:20px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+        </svg>
+        <span class="text-slate-700 text-sm">正在验证 SiliconFlow…</span>
+      </div>
+      <div id="status-success" class="hidden mb-5 bg-emerald-50 rounded-xl px-4 py-3 flex items-center gap-2.5">
+        <svg class="text-emerald-600 bounce-in shrink-0" style="width:22px;height:22px;" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+          <polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+        <div class="flex-1">
+          <div class="text-emerald-700 text-sm font-medium">Key 有效 · 已加密存储</div>
+          <div class="text-emerald-600/70 text-xs">关联到你的 SiliconFlow 账号 (last4: <span class="font-mono">7K2A</span>)</div>
+        </div>
+      </div>
+      <div id="status-error" class="hidden mb-5 bg-rose-50 rounded-xl px-4 py-3 flex items-start gap-2.5">
+        <svg class="text-rose-600 shrink-0 mt-0.5" style="width:20px;height:20px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="15" y1="9" x2="9" y2="15"/>
+          <line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>
+        <div>
+          <div class="text-rose-700 text-sm font-medium">Key 无效</div>
+          <div class="text-rose-600/80 text-xs mt-0.5">SiliconFlow 返回 401 — 检查格式或换一个 Key</div>
+        </div>
+      </div>
+
+      <!-- 底部按钮 -->
+      <div class="flex gap-3">
+        <button onclick="location.href='05-EmptyState.html'" class="flex-1 px-4 py-3 border border-slate-300 bg-white text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-50 transition">
+          取消
+        </button>
+        <button id="save-key-btn" onclick="validateKey()" class="btn-primary flex-1 px-4 py-3 text-white text-sm font-medium rounded-xl shadow-md"
+                style="background: #1e3a8a;">
+          保存并验证
+        </button>
+      </div>
+
+      <!-- demo 状态切换 -->
+      <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[10px] text-slate-400">
+        <span class="mr-1">demo:</span>
+        <button onclick="show('loading')" class="px-2 py-1 hover:bg-slate-50 rounded">loading</button>
+        <button onclick="show('success')" class="px-2 py-1 hover:bg-slate-50 rounded">success</button>
+        <button onclick="show('error')" class="px-2 py-1 hover:bg-slate-50 rounded">error</button>
+        <button onclick="show('none')" class="px-2 py-1 hover:bg-slate-50 rounded">none</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let showKey = false;
+    function toggleEye() {
+      const input = document.getElementById('key-input');
+      const icon = document.getElementById('eye-icon');
+      showKey = !showKey;
+      input.type = showKey ? 'text' : 'password';
+      icon.innerHTML = showKey
+        ? '<path d="M2 2l20 20M6.71 6.71C4.27 8.42 2.76 10.96 2.04 12.32a1 1 0 000 .64C3.42 16.49 7.36 19.5 12 19.5c2.07 0 4-.62 5.64-1.71M9.88 5.09A10.18 10.18 0 0112 4.5c4.64 0 8.58 3.01 9.96 7.18.07.21.07.43 0 .64-.43 1.3-1.13 2.49-2.03 3.5M9.88 9.88a3 3 0 104.24 4.24" stroke-linecap="round" stroke-linejoin="round"/>'
+        : '<path d="M2.04 12.32a1 1 0 010-.64C3.42 7.51 7.36 4.5 12 4.5s8.58 3.01 9.96 7.18a1 1 0 010 .64C20.58 16.49 16.64 19.5 12 19.5s-8.58-3.01-9.96-7.18z"/><circle cx="12" cy="12" r="3"/>';
+    }
+    function show(state) {
+      ['loading', 'success', 'error'].forEach(s => document.getElementById('status-' + s).classList.add('hidden'));
+      if (state !== 'none') document.getElementById('status-' + state).classList.remove('hidden');
+    }
+    function validateKey() {
+      const input = document.getElementById('key-input');
+      if (!input.value.trim().startsWith('sk-')) {
+        show('error');
+        input.classList.add('error');
+        return;
+      }
+      input.classList.remove('error');
+      show('loading');
+      const button = document.getElementById('save-key-btn');
+      button.disabled = true;
+      setTimeout(() => {
+        show('success');
+        button.disabled = false;
+        button.textContent = '验证成功，进入工作区';
+        button.onclick = () => { location.href = '05-EmptyState.html'; };
+      }, 900);
+    }
+  </script>
+  <script src="prototype-kit.js"></script>
+</body>
+</html>

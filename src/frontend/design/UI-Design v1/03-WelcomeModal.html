@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuMate · 欢迎</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    :root { --brand: #1e3a8a; --brand-soft: #3b5fb0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    @keyframes overlay-in { 0%{opacity:0;} 100%{opacity:1;} }
+    @keyframes modal-in {
+      0%   { opacity: 0; transform: scale(0.96) translateY(8px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    @keyframes card-in {
+      0%   { opacity: 0; transform: translateY(12px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    .anim-overlay { animation: overlay-in 200ms ease-out backwards; }
+    .anim-modal   { animation: modal-in 320ms cubic-bezier(0.2, 0, 0, 1) backwards; }
+    .anim-card    { animation: card-in 320ms cubic-bezier(0.2, 0, 0, 1) backwards; }
+    .anim-card:nth-child(1) { animation-delay: 220ms; }
+    .anim-card:nth-child(2) { animation-delay: 300ms; }
+    .anim-card:nth-child(3) { animation-delay: 380ms; }
+
+    .btn-primary {
+      transition: transform 160ms cubic-bezier(0.2, 0, 0, 1),
+                  box-shadow 160ms cubic-bezier(0.2, 0, 0, 1),
+                  filter 160ms;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 24px -8px rgba(30, 58, 138, 0.4);
+      filter: brightness(1.08);
+    }
+    .btn-primary:active { transform: translateY(0); }
+
+    /* 模拟主界面背景 (虚化) */
+    .mock-bg {
+      background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============ 模拟主界面 (作为 modal 背景) ============ -->
+  <div class="fixed inset-0 mock-bg overflow-hidden">
+    <!-- 顶部 header (简化版, 让用户感知"已经进入主界面") -->
+    <header class="h-14 border-b border-slate-200 bg-white flex items-center px-5 gap-3">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-lg flex items-center justify-center" style="background: #1e3a8a;">
+          <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <path d="M14 2v6h6"/>
+          </svg>
+        </div>
+        <span class="text-slate-900 text-sm font-semibold">DocuMate</span>
+      </div>
+      <div class="flex-1"></div>
+      <div class="w-8 h-8 rounded-full text-white flex items-center justify-center text-xs font-semibold"
+           style="background: linear-gradient(135deg, #1e3a8a, #3b5fb0);">Q</div>
+    </header>
+
+    <!-- 主区占位 (极淡, 体现"主界面在等你") -->
+    <div class="absolute inset-0 top-14 flex items-center justify-center text-slate-200 select-none pointer-events-none">
+      <div class="text-center">
+        <div class="text-7xl font-bold tracking-tight opacity-50">DocuMate</div>
+        <div class="text-sm mt-3 opacity-40">主界面正在等你 →</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 遮罩 + Modal ============ -->
+  <div class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm anim-overlay flex items-center justify-center p-4">
+
+    <div class="anim-modal bg-white rounded-3xl shadow-2xl p-8 w-full max-w-[480px]">
+
+      <!-- 顶部图标: 渐变圆 + Sparkles -->
+      <div class="flex justify-center mb-5">
+        <div class="w-16 h-16 rounded-full flex items-center justify-center shadow-lg"
+             style="background: linear-gradient(135deg, #1e3a8a 0%, #3b5fb0 100%);">
+          <svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 3 L13.5 9 L20 10.5 L13.5 12 L12 18 L10.5 12 L4 10.5 L10.5 9 Z"/>
+            <path d="M5 3v4 M3 5h4 M19 17v4 M17 19h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+      </div>
+
+      <h2 class="text-2xl font-bold text-center text-slate-900 mb-2 tracking-tight">欢迎使用 DocuMate</h2>
+      <p class="text-slate-500 text-sm text-center mb-7">开始之前, 有 3 件事想告诉你</p>
+
+      <!-- 3 张分组卡片 -->
+      <div class="space-y-3 mb-7">
+        <!-- 卡 1 -->
+        <div class="anim-card bg-slate-50 rounded-2xl p-4 flex items-start gap-3">
+          <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+               style="background: #1e3a8a;">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+              <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+            </svg>
+          </div>
+          <div>
+            <div class="text-base font-semibold text-slate-900 mb-0.5">大学生独立项目</div>
+            <div class="text-sm text-slate-600 leading-relaxed">DocuMate 是我业余时间做的开源项目, 不商业化, 数据全程留你这边</div>
+          </div>
+        </div>
+
+        <!-- 卡 2 -->
+        <div class="anim-card bg-amber-50 rounded-2xl p-4 flex items-start gap-3">
+          <div class="w-9 h-9 rounded-xl bg-amber-600 flex items-center justify-center shrink-0 mt-0.5">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+          <div>
+            <div class="text-base font-semibold text-slate-900 mb-0.5">测试期需自带 API Key</div>
+            <div class="text-sm text-slate-600 leading-relaxed">需要你提供 SiliconFlow API Key 才能用. 测试场景不消耗太多 token, 放心试</div>
+          </div>
+        </div>
+
+        <!-- 卡 3 -->
+        <div class="anim-card bg-emerald-50 rounded-2xl p-4 flex items-start gap-3">
+          <div class="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <path d="M9 12l2 2 4-4"/>
+            </svg>
+          </div>
+          <div>
+            <div class="text-base font-semibold text-slate-900 mb-0.5">我们如何保护你</div>
+            <div class="text-sm text-slate-600 leading-relaxed">API Key 用 <span class="font-mono text-emerald-700">Fernet AES</span> 加密存储 + 文档全程留本地, 不上云</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部按钮 -->
+      <div class="flex gap-3">
+        <button onclick="prototypeToast('欢迎说明会保留在公告入口中')" class="flex-1 px-4 py-3 border border-slate-300 bg-white text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-50 transition">
+          再看一下
+        </button>
+        <button onclick="location.href='04-ApiKeyModal.html'" class="btn-primary flex-1 px-4 py-3 text-white text-sm font-medium rounded-xl shadow-md flex items-center justify-center gap-2"
+                style="background: #1e3a8a;">
+          <span>现在去填</span>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="5" y1="12" x2="19" y2="12"/>
+            <polyline points="12 5 19 12 12 19"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- 提示文字 (小, 体现"以后可以再来看") -->
+      <p class="text-center text-xs text-slate-400 mt-5">
+        后续可在主界面顶部 <svg class="inline w-3.5 h-3.5 -translate-y-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 11l18-5v12L3 14v-3zM11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+        公告按钮重新查看
+      </p>
+    </div>
+  </div>
+
+  <script src="prototype-kit.js"></script>
+</body>
+</html>

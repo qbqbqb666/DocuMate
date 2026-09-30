@@ -1,0 +1,13 @@
+import { useState, type FormEvent } from 'react'
+import { useAuth } from './useAuth'
+import { AuthError } from './AuthClient'
+import { AuthHero, type RobotMood } from './AuthHero'
+import { BrandMark } from '../components/BrandMark'
+
+export function RegisterPage({ onSwitchToLogin }: { onSwitchToLogin: () => void }) {
+  const { register } = useAuth()
+  const [username, setUsername] = useState(''); const [password, setPassword] = useState(''); const [confirm, setConfirm] = useState(''); const [loading, setLoading] = useState(false); const [error, setError] = useState<string | null>(null); const [robotMood, setRobotMood] = useState<RobotMood>('idle')
+  const submit = async (event: FormEvent) => { event.preventDefault(); setError(null); if (!username || !password) return setError('请填写账号和密码'); if (username.trim().length < 8) return setError('账号至少需要 8 位'); if (!/^[A-Za-z0-9_]+$/.test(username.trim())) return setError('账号只能包含字母、数字和下划线'); if (password.length < 6) return setError('密码至少需要 6 位'); if (password !== confirm) return setError('两次密码输入不一致'); setLoading(true); try { await register(username.trim(), password) } catch (reason) { setError(reason instanceof AuthError ? (reason.status === 409 ? '这个账号已存在，请直接登录' : reason.detail) : '注册失败，请检查认证服务是否已启动'); setLoading(false) } }
+  const clearRobotMood = () => window.setTimeout(() => setRobotMood('idle'), 0)
+  return <div className="auth-page"><AuthHero mood={robotMood} /><main className="auth-panel auth-register-panel"><div className="auth-mobile-brand"><BrandMark size={42} /><b>DocuMate</b></div><div className="auth-form-wrap"><p className="auth-kicker">创建账号</p><h2>开始使用 DocuMate</h2><p className="auth-subtitle">只需一分钟，随后可配置自己的 API Key。</p><form onSubmit={submit} className="auth-form"><label>账号<input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="8–32 位字母、数字或下划线" minLength={8} maxLength={32} autoComplete="username" disabled={loading} /></label><label>密码<input type="password" value={password} onFocus={() => setRobotMood('peek')} onBlur={clearRobotMood} onChange={(e) => setPassword(e.target.value)} placeholder="至少 6 位" minLength={6} autoComplete="new-password" disabled={loading} /></label><label>确认密码<input type="password" value={confirm} onFocus={() => setRobotMood('peek')} onBlur={clearRobotMood} onChange={(e) => setConfirm(e.target.value)} placeholder="再输入一次密码" autoComplete="new-password" disabled={loading} /></label>{error && <div className="auth-error">{error}</div>}<button className="auth-primary" disabled={loading}>{loading ? '正在创建…' : '创建账号'}</button></form><p className="auth-terms">账号信息仅用于 DocuMate 登录，文档内容仍保留在本机。</p><p className="auth-switch">已经有账号？<button onClick={onSwitchToLogin}>返回登录</button></p></div></main></div>
+}

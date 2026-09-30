@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuMate · 字标 hover 触发动效对比</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400..900,0..100&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --brand: #1e3a8a;
+      --brand-soft: #3b5fb0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+      background: #fafafa;
+      -webkit-font-smoothing: antialiased;
+    }
+    .fraunces {
+      font-family: 'Fraunces', serif;
+      font-variation-settings: 'SOFT' 100, 'opsz' 144;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+    }
+    .wordmark {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0;
+      line-height: 1;
+    }
+    .wordmark .d-svg { display: inline-block; margin-right: -0.06em; }
+
+    /* === 默认 D 内部翻书 (慢, 4s) === */
+    @keyframes page-flip-slow {
+      0%, 30%, 100% { transform: translateX(0) rotate(0deg); }
+      45%, 70%      { transform: translateX(-1px) rotate(-22deg); }
+    }
+    .page-flip { animation: page-flip-slow 4s ease-in-out infinite; transform-origin: 30px 24px; }
+
+    @keyframes twinkle-default {
+      0%, 100% { opacity: 0.6; }
+      50%      { opacity: 1; }
+    }
+    .sparkle path { animation: twinkle-default 2.5s ease-in-out infinite; }
+
+    /* ====== 卡片基础 ====== */
+    .demo-card {
+      transition: border-color 200ms;
+    }
+    .demo-card:hover { border-color: #1e3a8a55; }
+
+    /* ============================================================
+       Hover A · Lift + Shadow (整体抬起 + 投影)
+       ============================================================ */
+    .hover-a .wordmark {
+      transition: transform 220ms cubic-bezier(0.2, 0, 0, 1),
+                  filter 220ms cubic-bezier(0.2, 0, 0, 1);
+      cursor: pointer;
+    }
+    .hover-a:hover .wordmark {
+      transform: translateY(-6px);
+      filter: drop-shadow(0 14px 24px rgba(30, 58, 138, 0.28));
+    }
+
+    /* ============================================================
+       Hover B · 翻书加速 + 幅度变大 (跟字标语义结合, 最契合)
+       ============================================================ */
+    @keyframes page-flip-fast {
+      0%, 100% { transform: translateX(0) rotate(0deg); }
+      30%, 70% { transform: translateX(-2px) rotate(-55deg); }
+    }
+    .hover-b .wordmark { cursor: pointer; }
+    .hover-b:hover .page-flip { animation: page-flip-fast 1.3s ease-in-out infinite; }
+
+    /* ============================================================
+       Hover C · 字母摇晃 (stagger wave)
+       ============================================================ */
+    @keyframes letter-wobble {
+      0%, 100% { transform: rotate(0deg) translateY(0); }
+      25%      { transform: rotate(-3deg) translateY(-2px); }
+      75%      { transform: rotate(3deg) translateY(-2px); }
+    }
+    .hover-c .wordmark { cursor: pointer; }
+    .hover-c .wordmark > * {
+      transform-origin: center bottom;
+      transition: transform 200ms;
+    }
+    .hover-c:hover .wordmark > * {
+      animation: letter-wobble 700ms ease-in-out infinite;
+    }
+    .hover-c:hover .wordmark > *:nth-child(1) { animation-delay: 0ms;  }
+    .hover-c:hover .wordmark > *:nth-child(2) { animation-delay: 60ms; }
+    .hover-c:hover .wordmark > *:nth-child(3) { animation-delay: 120ms; }
+    .hover-c:hover .wordmark > *:nth-child(4) { animation-delay: 180ms; }
+    .hover-c:hover .wordmark > *:nth-child(5) { animation-delay: 240ms; }
+    .hover-c:hover .wordmark > *:nth-child(6) { animation-delay: 300ms; }
+    .hover-c:hover .wordmark > *:nth-child(7) { animation-delay: 360ms; }
+    .hover-c:hover .wordmark > *:nth-child(8) { animation-delay: 420ms; }
+
+    /* ============================================================
+       Hover D · 磁吸光晕 (鼠标位置跟随)
+       ============================================================ */
+    .hover-d {
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .hover-d::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        circle 180px at var(--glow-x, 50%) var(--glow-y, 50%),
+        rgba(30, 58, 138, 0.15),
+        transparent 70%
+      );
+      opacity: 0;
+      transition: opacity 260ms;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .hover-d:hover::before { opacity: 1; }
+    .hover-d .wordmark, .hover-d .label { position: relative; z-index: 2; }
+
+    /* ============================================================
+       Hover E · Sparkle 爆发 (sparkle 变大 + 多出几颗小星)
+       ============================================================ */
+    .hover-e .wordmark { cursor: pointer; }
+    .hover-e .sparkle {
+      transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .hover-e:hover .sparkle {
+      transform: scale(1.6) translateY(-60px);
+    }
+    .hover-e .sparkle-extra {
+      opacity: 0;
+      transition: opacity 320ms, transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .hover-e:hover .sparkle-extra { opacity: 1; }
+    .hover-e:hover .sparkle-extra-1 { transform: translate(-12px, -50px) scale(1) rotate(-15deg); }
+    .hover-e:hover .sparkle-extra-2 { transform: translate(-30px, -75px) scale(0.8) rotate(20deg); }
+    .hover-e:hover .sparkle-extra-3 { transform: translate(8px, -85px) scale(0.7) rotate(-10deg); }
+
+    /* ============================================================
+       推荐组合 (B + A): 抬起 + 翻书加速 + 微 sparkle 放大
+       ============================================================ */
+    .hover-combo .wordmark {
+      transition: transform 220ms cubic-bezier(0.2, 0, 0, 1),
+                  filter 220ms cubic-bezier(0.2, 0, 0, 1);
+      cursor: pointer;
+    }
+    .hover-combo:hover .wordmark {
+      transform: translateY(-4px);
+      filter: drop-shadow(0 10px 20px rgba(30, 58, 138, 0.22));
+    }
+    .hover-combo:hover .page-flip { animation: page-flip-fast 1.5s ease-in-out infinite; }
+    .hover-combo .sparkle { transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+    .hover-combo:hover .sparkle { transform: scale(1.25) translateY(-60px); }
+  </style>
+</head>
+<body class="min-h-screen py-10 px-6">
+
+  <div class="max-w-6xl mx-auto">
+
+    <h1 class="text-3xl font-bold mb-2 tracking-tight" style="color:#1e3a8a;">DocuMate 字标 · hover 触发动效对比</h1>
+    <p class="text-slate-600 text-sm mb-1">5 个方向, 每个一张卡片. <strong>鼠标移到字标上感受效果, 移开就恢复</strong>.</p>
+    <p class="text-slate-500 text-xs mb-8">⚠️ 注意: 入场动效已经完成 (页面加载时只播一次), 然后才是 hover. 等字标稳定后再 hover.</p>
+
+    <!-- ============================================================ -->
+    <!-- Hover A · Lift + Shadow                                       -->
+    <!-- ============================================================ -->
+    <div class="demo-card hover-a bg-white rounded-3xl border border-slate-200 p-10 mb-6 relative">
+      <div class="absolute top-5 right-6 flex items-center gap-2">
+        <span class="text-xs font-semibold text-slate-700">Hover A</span>
+        <span class="text-xs text-slate-400 font-mono">通用质感</span>
+      </div>
+
+      <div class="wordmark" style="font-size: 120px;">
+        <svg class="d-svg" viewBox="0 0 130 160" width="108" height="132" style="transform: translateY(20px);">
+          <path d="M 18 6 L 18 154 L 64 154 C 102 154, 124 124, 124 80 C 124 36, 102 6, 64 6 Z" fill="#1e3a8a" />
+          <g transform="translate(36, 56)">
+            <path d="M 0 4 L 30 0 L 30 50 L 0 46 Z" fill="#ffffff"/>
+            <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#ffffff"/>
+            <line x1="30" y1="2" x2="30" y2="48" stroke="#1e3a8a" stroke-width="1" opacity="0.35"/>
+            <line x1="5" y1="14" x2="26" y2="12" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            <g class="page-flip">
+              <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#f0f4ff" stroke="#1e3a8a" stroke-width="1.4" stroke-linejoin="round"/>
+              <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            </g>
+          </g>
+        </svg>
+        <span class="fraunces" style="color:var(--brand);">o</span>
+        <span class="fraunces" style="color:var(--brand);">c</span>
+        <span class="fraunces" style="color:var(--brand);">u</span>
+        <span class="fraunces" style="color:var(--brand-soft);">M</span>
+        <span class="fraunces" style="color:var(--brand-soft);">a</span>
+        <span class="fraunces" style="color:var(--brand-soft);">t</span>
+        <span class="fraunces" style="color:var(--brand-soft);">e</span>
+      </div>
+
+      <div class="label mt-4 text-sm text-slate-600 leading-relaxed">
+        <strong style="color:#1e3a8a;">效果</strong>: 字标整体抬起 6px + 加深投影. 像被指尖轻轻托起.<br>
+        <strong style="color:#1e3a8a;">质感</strong>: 干净 / 安全 / 通用. 跟按钮 hover 一个套路.<br>
+        <strong style="color:#1e3a8a;">风险</strong>: 太"标准", 没记忆点.
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- Hover B · 翻书加速 (跟字标主题最契合)                          -->
+    <!-- ============================================================ -->
+    <div class="demo-card hover-b bg-white rounded-3xl border border-slate-200 p-10 mb-6 relative">
+      <div class="absolute top-5 right-6 flex items-center gap-2">
+        <span class="text-xs font-semibold" style="color:#1e3a8a;">Hover B</span>
+        <span class="text-[10px] text-white px-2 py-0.5 rounded-full font-medium" style="background:#1e3a8a;">推荐</span>
+      </div>
+
+      <div class="wordmark" style="font-size: 120px;">
+        <svg class="d-svg" viewBox="0 0 130 160" width="108" height="132" style="transform: translateY(20px);">
+          <path d="M 18 6 L 18 154 L 64 154 C 102 154, 124 124, 124 80 C 124 36, 102 6, 64 6 Z" fill="#1e3a8a" />
+          <g transform="translate(36, 56)">
+            <path d="M 0 4 L 30 0 L 30 50 L 0 46 Z" fill="#ffffff"/>
+            <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#ffffff"/>
+            <line x1="30" y1="2" x2="30" y2="48" stroke="#1e3a8a" stroke-width="1" opacity="0.35"/>
+            <line x1="5" y1="14" x2="26" y2="12" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            <g class="page-flip">
+              <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#f0f4ff" stroke="#1e3a8a" stroke-width="1.4" stroke-linejoin="round"/>
+              <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            </g>
+          </g>
+        </svg>
+        <span class="fraunces" style="color:var(--brand);">o</span>
+        <span class="fraunces" style="color:var(--brand);">c</span>
+        <span class="fraunces" style="color:var(--brand);">u</span>
+        <span class="fraunces" style="color:var(--brand-soft);">M</span>
+        <span class="fraunces" style="color:var(--brand-soft);">a</span>
+        <span class="fraunces" style="color:var(--brand-soft);">t</span>
+        <span class="fraunces" style="color:var(--brand-soft);">e</span>
+      </div>
+
+      <div class="label mt-4 text-sm text-slate-600 leading-relaxed">
+        <strong style="color:#1e3a8a;">效果</strong>: D 内部书翻页加速 (4s → 1.3s) + 翻起角度 -22° → -55° (翻得更夸张).<br>
+        <strong style="color:#1e3a8a;">质感</strong>: <strong>跟"文档助手"主题强绑定</strong>. 鼠标移上去像有人在加速翻你的书.<br>
+        <strong style="color:#1e3a8a;">优势</strong>: 独有 / 别人抄不走 / 视觉惊喜.
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- Hover C · 字母摇晃 stagger wave                                -->
+    <!-- ============================================================ -->
+    <div class="demo-card hover-c bg-white rounded-3xl border border-slate-200 p-10 mb-6 relative">
+      <div class="absolute top-5 right-6 flex items-center gap-2">
+        <span class="text-xs font-semibold text-slate-700">Hover C</span>
+        <span class="text-xs text-slate-400 font-mono">灵动派</span>
+      </div>
+
+      <div class="wordmark" style="font-size: 120px;">
+        <svg class="d-svg" viewBox="0 0 130 160" width="108" height="132" style="transform: translateY(20px);">
+          <path d="M 18 6 L 18 154 L 64 154 C 102 154, 124 124, 124 80 C 124 36, 102 6, 64 6 Z" fill="#1e3a8a" />
+          <g transform="translate(36, 56)">
+            <path d="M 0 4 L 30 0 L 30 50 L 0 46 Z" fill="#ffffff"/>
+            <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#ffffff"/>
+            <line x1="30" y1="2" x2="30" y2="48" stroke="#1e3a8a" stroke-width="1" opacity="0.35"/>
+            <line x1="5" y1="14" x2="26" y2="12" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            <g class="page-flip">
+              <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#f0f4ff" stroke="#1e3a8a" stroke-width="1.4" stroke-linejoin="round"/>
+              <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            </g>
+          </g>
+        </svg>
+        <span class="fraunces" style="color:var(--brand);">o</span>
+        <span class="fraunces" style="color:var(--brand);">c</span>
+        <span class="fraunces" style="color:var(--brand);">u</span>
+        <span class="fraunces" style="color:var(--brand-soft);">M</span>
+        <span class="fraunces" style="color:var(--brand-soft);">a</span>
+        <span class="fraunces" style="color:var(--brand-soft);">t</span>
+        <span class="fraunces" style="color:var(--brand-soft);">e</span>
+      </div>
+
+      <div class="label mt-4 text-sm text-slate-600 leading-relaxed">
+        <strong style="color:#1e3a8a;">效果</strong>: 每个字母独立左右摇晃 (rotate -3°/+3°) + 微抬起 2px, stagger 60ms 像波浪.<br>
+        <strong style="color:#1e3a8a;">质感</strong>: 灵动 / 调皮 / 像在跟你打招呼.<br>
+        <strong style="color:#1e3a8a;">风险</strong>: 可能跟"严肃文档" 调性冲突, 像玩具.
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- Hover D · 磁吸光晕 (鼠标位置跟随)                              -->
+    <!-- ============================================================ -->
+    <div class="demo-card hover-d bg-white rounded-3xl border border-slate-200 p-10 mb-6 relative"
+         onmousemove="updateGlow(event, this)">
+      <div class="absolute top-5 right-6 flex items-center gap-2" style="z-index:3;">
+        <span class="text-xs font-semibold text-slate-700">Hover D</span>
+        <span class="text-xs text-slate-400 font-mono">高级感 / Linear 派</span>
+      </div>
+
+      <div class="wordmark" style="font-size: 120px;">
+        <svg class="d-svg" viewBox="0 0 130 160" width="108" height="132" style="transform: translateY(20px);">
+          <path d="M 18 6 L 18 154 L 64 154 C 102 154, 124 124, 124 80 C 124 36, 102 6, 64 6 Z" fill="#1e3a8a" />
+          <g transform="translate(36, 56)">
+            <path d="M 0 4 L 30 0 L 30 50 L 0 46 Z" fill="#ffffff"/>
+            <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#ffffff"/>
+            <line x1="30" y1="2" x2="30" y2="48" stroke="#1e3a8a" stroke-width="1" opacity="0.35"/>
+            <line x1="5" y1="14" x2="26" y2="12" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            <g class="page-flip">
+              <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#f0f4ff" stroke="#1e3a8a" stroke-width="1.4" stroke-linejoin="round"/>
+              <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            </g>
+          </g>
+        </svg>
+        <span class="fraunces" style="color:var(--brand);">o</span>
+        <span class="fraunces" style="color:var(--brand);">c</span>
+        <span class="fraunces" style="color:var(--brand);">u</span>
+        <span class="fraunces" style="color:var(--brand-soft);">M</span>
+        <span class="fraunces" style="color:var(--brand-soft);">a</span>
+        <span class="fraunces" style="color:var(--brand-soft);">t</span>
+        <span class="fraunces" style="color:var(--brand-soft);">e</span>
+      </div>
+
+      <div class="label mt-4 text-sm text-slate-600 leading-relaxed">
+        <strong style="color:#1e3a8a;">效果</strong>: 一个柔光圆跟着鼠标在卡片上移动, 像一个 spotlight 在追你.<br>
+        <strong style="color:#1e3a8a;">质感</strong>: 高级 / Linear / Vercel 派. 在鼠标周围出现 180px 的浅色光晕.<br>
+        <strong style="color:#1e3a8a;">缺点</strong>: 需要 JavaScript 跟踪鼠标位置.
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- Hover E · Sparkle 爆发                                          -->
+    <!-- ============================================================ -->
+    <div class="demo-card hover-e bg-white rounded-3xl border border-slate-200 p-10 mb-6 relative">
+      <div class="absolute top-5 right-6 flex items-center gap-2">
+        <span class="text-xs font-semibold text-slate-700">Hover E</span>
+        <span class="text-xs text-slate-400 font-mono">浪漫派</span>
+      </div>
+
+      <div class="wordmark relative" style="font-size: 120px;">
+        <svg class="d-svg" viewBox="0 0 130 160" width="108" height="132" style="transform: translateY(20px);">
+          <path d="M 18 6 L 18 154 L 64 154 C 102 154, 124 124, 124 80 C 124 36, 102 6, 64 6 Z" fill="#1e3a8a" />
+          <g transform="translate(36, 56)">
+            <path d="M 0 4 L 30 0 L 30 50 L 0 46 Z" fill="#ffffff"/>
+            <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#ffffff"/>
+            <line x1="30" y1="2" x2="30" y2="48" stroke="#1e3a8a" stroke-width="1" opacity="0.35"/>
+            <line x1="5" y1="14" x2="26" y2="12" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            <g class="page-flip">
+              <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#f0f4ff" stroke="#1e3a8a" stroke-width="1.4" stroke-linejoin="round"/>
+              <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            </g>
+          </g>
+        </svg>
+        <span class="fraunces" style="color:var(--brand);">o</span>
+        <span class="fraunces" style="color:var(--brand);">c</span>
+        <span class="fraunces" style="color:var(--brand);">u</span>
+        <span class="fraunces" style="color:var(--brand-soft);">M</span>
+        <span class="fraunces" style="color:var(--brand-soft);">a</span>
+        <span class="fraunces" style="color:var(--brand-soft);">t</span>
+        <span class="fraunces" style="color:var(--brand-soft);">e</span>
+
+        <!-- 主 sparkle -->
+        <svg class="sparkle" width="26" height="26" viewBox="0 0 24 24" style="display:inline-block;margin-left:-4px;transform:translateY(-60px);">
+          <path d="M12 3 L13.5 9 L20 10.5 L13.5 12 L12 18 L10.5 12 L4 10.5 L10.5 9 Z" fill="var(--brand-soft)"/>
+        </svg>
+
+        <!-- 额外 sparkles (hover 时出现) -->
+        <svg class="sparkle-extra sparkle-extra-1 absolute" width="16" height="16" viewBox="0 0 24 24" style="left:80%;top:0;transform:scale(0);">
+          <path d="M12 3 L13.5 9 L20 10.5 L13.5 12 L12 18 L10.5 12 L4 10.5 L10.5 9 Z" fill="#3b5fb0"/>
+        </svg>
+        <svg class="sparkle-extra sparkle-extra-2 absolute" width="14" height="14" viewBox="0 0 24 24" style="left:75%;top:0;transform:scale(0);">
+          <path d="M12 3 L13.5 9 L20 10.5 L13.5 12 L12 18 L10.5 12 L4 10.5 L10.5 9 Z" fill="#6b85d4"/>
+        </svg>
+        <svg class="sparkle-extra sparkle-extra-3 absolute" width="12" height="12" viewBox="0 0 24 24" style="left:90%;top:0;transform:scale(0);">
+          <path d="M12 3 L13.5 9 L20 10.5 L13.5 12 L12 18 L10.5 12 L4 10.5 L10.5 9 Z" fill="#a5b8e1"/>
+        </svg>
+      </div>
+
+      <div class="label mt-4 text-sm text-slate-600 leading-relaxed">
+        <strong style="color:#1e3a8a;">效果</strong>: e 旁的 sparkle 放大 1.6×, 同时周围多冒出 3 颗小 sparkle (不同颜色 + 旋转角度).<br>
+        <strong style="color:#1e3a8a;">质感</strong>: 浪漫 / 庆祝感 / 像在欢迎你.<br>
+        <strong style="color:#1e3a8a;">风险</strong>: 偏装饰, 可能稍 cute, 跟"专业工具" 调性有距离.
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 推荐组合 (B + A 微版本)                                        -->
+    <!-- ============================================================ -->
+    <div class="demo-card hover-combo bg-gradient-to-br from-white to-blue-50 rounded-3xl border-2 p-10 mb-6 relative" style="border-color:#1e3a8a44;">
+      <div class="absolute top-5 right-6 flex items-center gap-2">
+        <span class="text-xs font-semibold" style="color:#1e3a8a;">推荐组合</span>
+        <span class="text-[10px] text-white px-2 py-0.5 rounded-full font-medium" style="background:#1e3a8a;">B + A 轻版</span>
+      </div>
+
+      <div class="wordmark" style="font-size: 120px;">
+        <svg class="d-svg" viewBox="0 0 130 160" width="108" height="132" style="transform: translateY(20px);">
+          <path d="M 18 6 L 18 154 L 64 154 C 102 154, 124 124, 124 80 C 124 36, 102 6, 64 6 Z" fill="#1e3a8a" />
+          <g transform="translate(36, 56)">
+            <path d="M 0 4 L 30 0 L 30 50 L 0 46 Z" fill="#ffffff"/>
+            <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#ffffff"/>
+            <line x1="30" y1="2" x2="30" y2="48" stroke="#1e3a8a" stroke-width="1" opacity="0.35"/>
+            <line x1="5" y1="14" x2="26" y2="12" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            <g class="page-flip">
+              <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#f0f4ff" stroke="#1e3a8a" stroke-width="1.4" stroke-linejoin="round"/>
+              <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            </g>
+          </g>
+        </svg>
+        <span class="fraunces" style="color:var(--brand);">o</span>
+        <span class="fraunces" style="color:var(--brand);">c</span>
+        <span class="fraunces" style="color:var(--brand);">u</span>
+        <span class="fraunces" style="color:var(--brand-soft);">M</span>
+        <span class="fraunces" style="color:var(--brand-soft);">a</span>
+        <span class="fraunces" style="color:var(--brand-soft);">t</span>
+        <span class="fraunces" style="color:var(--brand-soft);">e</span>
+        <svg class="sparkle" width="22" height="22" viewBox="0 0 24 24" style="display:inline-block;margin-left:-2px;transform:translateY(-60px);">
+          <path d="M12 3 L13.5 9 L20 10.5 L13.5 12 L12 18 L10.5 12 L4 10.5 L10.5 9 Z" fill="var(--brand-soft)"/>
+        </svg>
+      </div>
+
+      <div class="label mt-4 text-sm text-slate-600 leading-relaxed">
+        <strong style="color:#1e3a8a;">组合配方</strong>:<br>
+        ① 字标整体抬起 4px + 投影 (轻版 A, 不过冲)<br>
+        ② D 内部翻书加速 (B, 4s → 1.5s + 翻起角度更大)<br>
+        ③ Sparkle 微微放大 1.25×<br>
+        <strong style="color:#1e3a8a;">效果</strong>: 既有通用质感 (lift), 又有 DocuMate 独有的"翻阅" 感, 还有 sparkle 点缀.<br>
+        <strong style="color:#1e3a8a;">这是我的推荐</strong>: 不抢戏, 但有性格.
+      </div>
+    </div>
+
+    <!-- 反馈引导 -->
+    <div class="mt-10 bg-amber-50 border border-amber-200 rounded-2xl p-5">
+      <div class="font-semibold text-amber-900 mb-2">📋 你需要做的</div>
+      <div class="text-amber-800 text-sm leading-relaxed space-y-1.5">
+        <p>1. 鼠标依次放上 5 张卡 + 推荐组合, 感受不同 hover 效果</p>
+        <p>2. 跟我说你最喜欢的 (单选 / 多选 / 自己组合)</p>
+        <p>3. 比如: "B 太单一加上 A 的抬起" / "用 D 就够了, 别的都不要" / "B + E 一起来个浪漫"</p>
+      </div>
+    </div>
+
+    <div class="mt-4 bg-blue-50 border rounded-2xl p-5" style="border-color:#1e3a8a33;">
+      <div class="font-semibold mb-2" style="color:#1e3a8a;">💡 我的偏好顺序</div>
+      <ol class="text-slate-700 text-sm space-y-1 leading-relaxed list-decimal list-inside">
+        <li><strong>推荐组合 (B + A 轻版)</strong>: 不抢戏 + DocuMate 独有 + 通用质感</li>
+        <li><strong>B 单独</strong>: 极简版, 只动 D 内的书, 其他保持静态. 最克制</li>
+        <li><strong>D 磁吸光晕</strong>: 现代高级派, 但跟 DocuMate 主题关联弱</li>
+        <li><strong>A 单独</strong>: 太通用, 跟随便哪个按钮 hover 一样</li>
+        <li><strong>C 摇晃 / E 爆发</strong>: 偏装饰, 可能跟"严肃工具" 调性冲突, 慎用</li>
+      </ol>
+    </div>
+
+  </div>
+
+  <script>
+    function updateGlow(e, card) {
+      const rect = card.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      card.style.setProperty('--glow-x', x + '%');
+      card.style.setProperty('--glow-y', y + '%');
+    }
+  </script>
+
+</body>
+</html>

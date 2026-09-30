@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuMate · 字标 v4 (下落 + 逆时针滚动撞击)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400..900,0..100&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --brand: #1e3a8a;
+      --brand-soft: #3b5fb0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+      background: #fafafa;
+      -webkit-font-smoothing: antialiased;
+    }
+    .fraunces {
+      font-family: 'Fraunces', serif;
+      font-variation-settings: 'SOFT' 100, 'opsz' 144;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+    }
+
+    .wordmark {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0;
+      line-height: 1;
+    }
+    .wordmark .d-svg { display: inline-block; margin-right: -0.06em; }
+
+    /* ============================================================
+       新动效 (推荐): 先垂直下落, 再逆时针滚动向左, 最后撞击回弹
+       ============================================================ */
+    @keyframes letter-fall-and-roll {
+      /* 阶段 1: 起点 (右上高空, opacity 0, 不旋转) */
+      0% {
+        opacity: 0;
+        transform: translate(900px, -450px) rotate(0deg);
+        animation-timing-function: cubic-bezier(0.5, 0, 1, 0.5);  /* 重力 ease-in 加速 */
+      }
+      /* 渐显 */
+      10% { opacity: 1; }
+      /* 阶段 2: 触"地" (y 已到字母底部对齐位置, 开始微旋转) */
+      28% {
+        opacity: 1;
+        transform: translate(900px, 0px) rotate(-40deg);
+        animation-timing-function: cubic-bezier(0.4, 0.0, 0.3, 1);  /* 滚动主体 */
+      }
+      /* 阶段 3: 向左滚, 旋转大部完成 */
+      85% {
+        transform: translate(8px, 0px) rotate(-720deg);
+        animation-timing-function: ease-out;
+      }
+      /* 阶段 4: 撞击 overshoot (略过目标位置) */
+      93% {
+        transform: translate(-5px, -2px) rotate(-735deg);
+        animation-timing-function: ease-out;
+      }
+      /* 阶段 5: 回弹定住 */
+      100% {
+        opacity: 1;
+        transform: translate(0, 0) rotate(-720deg);
+      }
+    }
+
+    .anim-roll-fall > * {
+      display: inline-block;
+      animation: letter-fall-and-roll 1100ms backwards;
+    }
+    .anim-roll-fall > *:nth-child(1) { animation-delay:    0ms; }   /* D */
+    .anim-roll-fall > *:nth-child(2) { animation-delay:  900ms; }   /* o */
+    .anim-roll-fall > *:nth-child(3) { animation-delay: 1050ms; }   /* c */
+    .anim-roll-fall > *:nth-child(4) { animation-delay: 1200ms; }   /* u */
+    .anim-roll-fall > *:nth-child(5) { animation-delay: 1400ms; }   /* M (Docu→Mate 多 50ms) */
+    .anim-roll-fall > *:nth-child(6) { animation-delay: 1550ms; }   /* a */
+    .anim-roll-fall > *:nth-child(7) { animation-delay: 1700ms; }   /* t */
+    .anim-roll-fall > *:nth-child(8) { animation-delay: 1850ms; }   /* e */
+
+
+    /* ============================================================
+       旧动效 (留作对比): 顺时针 720° 直接飞到位
+       ============================================================ */
+    @keyframes letter-roll-in-old {
+      0%   { opacity: 0; transform: translate(900px, -300px) rotate(0deg); }
+      15%  { opacity: 1; }
+      100% { opacity: 1; transform: translate(0, 0) rotate(720deg); }
+    }
+    .anim-roll-old > * {
+      display: inline-block;
+      animation: letter-roll-in-old 800ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+    }
+    .anim-roll-old > *:nth-child(1) { animation-delay:    0ms; }
+    .anim-roll-old > *:nth-child(2) { animation-delay:  700ms; }
+    .anim-roll-old > *:nth-child(3) { animation-delay:  850ms; }
+    .anim-roll-old > *:nth-child(4) { animation-delay: 1000ms; }
+    .anim-roll-old > *:nth-child(5) { animation-delay: 1200ms; }
+    .anim-roll-old > *:nth-child(6) { animation-delay: 1350ms; }
+    .anim-roll-old > *:nth-child(7) { animation-delay: 1500ms; }
+    .anim-roll-old > *:nth-child(8) { animation-delay: 1650ms; }
+
+
+    /* ============================================================
+       Sparkle 弹出 (新动效完整走完后)
+       ============================================================ */
+    @keyframes sparkle-pop {
+      0%   { opacity: 0; transform: scale(0) translateY(-80px); }
+      60%  { opacity: 1; transform: scale(1.4) translateY(-80px); }
+      100% { opacity: 0.9; transform: scale(1) translateY(-80px); }
+    }
+    @keyframes twinkle-opacity {
+      0%, 100% { opacity: 0.6; }
+      50%      { opacity: 1; }
+    }
+    .sparkle-anim-new {
+      animation: sparkle-pop 600ms cubic-bezier(0.34, 1.56, 0.64, 1) 3000ms backwards;
+    }
+    .sparkle-anim-new > path {
+      animation: twinkle-opacity 2.5s ease-in-out 3800ms infinite;
+    }
+    .sparkle-anim-old {
+      animation: sparkle-pop 600ms cubic-bezier(0.34, 1.56, 0.64, 1) 1900ms backwards;
+    }
+    .sparkle-anim-old > path {
+      animation: twinkle-opacity 2.5s ease-in-out 2700ms infinite;
+    }
+
+
+    /* ============================================================
+       D 内部翻起页慢动效 (字标全部到位后才开始, 4s 循环)
+       ============================================================ */
+    @keyframes inner-page-flip {
+      0%, 30%, 100% { transform: translateX(0) rotate(0deg); }
+      45%, 70%      { transform: translateX(-1px) rotate(-22deg); }
+    }
+    .inner-page-anim {
+      animation: inner-page-flip 4s ease-in-out infinite;
+      animation-delay: 3800ms;
+      transform-origin: 30px 24px;
+    }
+    /* 旧版下 D 翻书启动更早 */
+    .inner-page-anim-old {
+      animation: inner-page-flip 4s ease-in-out infinite;
+      animation-delay: 2700ms;
+      transform-origin: 30px 24px;
+    }
+
+
+    /* ============================================================
+       Hover 触发动效 · C 灵动派 (用户选定)
+       入场动画结束后, 鼠标 hover 字标, 字母独立左右摇晃 + 微抬起
+       stagger 60ms 像波浪从左往右传过去
+       ============================================================ */
+    @keyframes letter-wobble {
+      0%, 100% { transform: rotate(0deg) translateY(0); }
+      25%      { transform: rotate(-3deg) translateY(-2px); }
+      75%      { transform: rotate(3deg) translateY(-2px); }
+    }
+    .hover-c { cursor: pointer; }
+    .hover-c > * {
+      transform-origin: center bottom;
+      transition: transform 200ms ease-out;
+    }
+    .hover-c:hover > * {
+      animation: letter-wobble 700ms ease-in-out infinite;
+      transition: none;
+    }
+    .hover-c:hover > *:nth-child(1) { animation-delay:   0ms; }  /* D */
+    .hover-c:hover > *:nth-child(2) { animation-delay:  60ms; }  /* o */
+    .hover-c:hover > *:nth-child(3) { animation-delay: 120ms; }  /* c */
+    .hover-c:hover > *:nth-child(4) { animation-delay: 180ms; }  /* u */
+    .hover-c:hover > *:nth-child(5) { animation-delay: 240ms; }  /* M */
+    .hover-c:hover > *:nth-child(6) { animation-delay: 300ms; }  /* a */
+    .hover-c:hover > *:nth-child(7) { animation-delay: 360ms; }  /* t */
+    .hover-c:hover > *:nth-child(8) { animation-delay: 420ms; }  /* e */
+
+
+    .sample-card { transition: transform 200ms cubic-bezier(0.2,0,0,1), box-shadow 200ms; }
+    .sample-card:hover { transform: translateY(-3px); box-shadow: 0 16px 40px rgba(30, 58, 138, 0.10); }
+  </style>
+</head>
+<body class="min-h-screen py-10 px-6">
+
+  <div class="max-w-6xl mx-auto">
+
+    <h1 class="text-3xl font-bold mb-2 tracking-tight" style="color:#1e3a8a;">DocuMate 字标 + 入场动效</h1>
+    <p class="text-slate-600 text-sm mb-1">新动效 (推荐): <strong>右上高空 → 垂直下落 → 触地后逆时针向左滚 → 撞击 D 后 spring 回弹 → 静止</strong></p>
+    <p class="text-slate-500 text-xs mb-2">单只字母时长 1100ms · 整套 ~3s · sparkle 出场 + 翻书启动延后到 3.8s</p>
+    <p class="text-slate-500 text-xs mb-10">V4a (旧, 顺时针直飞) 和 V4b (新, 下落+逆时针+撞击) 并排, 两个都有重播按钮.</p>
+
+    <!-- ============================================================ -->
+    <!-- V1: hero 大字标 + 新动效                                       -->
+    <!-- ============================================================ -->
+    <div class="sample-card bg-white rounded-3xl border border-slate-200 p-12 mb-8 relative overflow-hidden min-h-[360px]">
+      <div class="absolute top-6 right-6 text-xs text-slate-400 font-mono">V1 · hero 大字标 (200px) · 新动效</div>
+
+      <div class="wordmark anim-roll-fall hover-c" style="font-size: 200px;">
+        <svg class="d-svg" viewBox="0 0 130 160" width="180" height="220" style="transform: translateY(34px);">
+          <defs>
+            <linearGradient id="page-grad-1" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%"   stop-color="#ffffff"/>
+              <stop offset="100%" stop-color="#c7d5ed"/>
+            </linearGradient>
+          </defs>
+          <path d="M 18 6 L 18 154 L 64 154 C 102 154, 124 124, 124 80 C 124 36, 102 6, 64 6 Z" fill="#1e3a8a" />
+          <g transform="translate(36, 56)">
+            <path d="M 0 4 L 30 0 L 30 50 L 0 46 Z" fill="#ffffff"/>
+            <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#ffffff"/>
+            <line x1="30" y1="2" x2="30" y2="48" stroke="#1e3a8a" stroke-width="1" opacity="0.35"/>
+            <line x1="5" y1="14" x2="26" y2="12" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            <line x1="5" y1="22" x2="27" y2="20" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            <line x1="5" y1="30" x2="25" y2="28" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            <line x1="34" y1="20" x2="57" y2="22" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            <g class="inner-page-anim">
+              <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="url(#page-grad-1)" stroke="#1e3a8a" stroke-width="1.4" stroke-linejoin="round"/>
+              <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+              <line x1="34" y1="20" x2="57" y2="22" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+            </g>
+          </g>
+        </svg>
+        <span class="fraunces" style="color:var(--brand);">o</span>
+        <span class="fraunces" style="color:var(--brand);">c</span>
+        <span class="fraunces" style="color:var(--brand);">u</span>
+        <span class="fraunces" style="color:var(--brand-soft);">M</span>
+        <span class="fraunces" style="color:var(--brand-soft);">a</span>
+        <span class="fraunces" style="color:var(--brand-soft);">t</span>
+        <span class="fraunces" style="color:var(--brand-soft);">e</span>
+      </div>
+      <svg class="sparkle-anim-new" width="38" height="38" viewBox="0 0 24 24" style="display:inline-block;margin-left:-44px;transform:translateY(-160px);">
+        <path d="M12 3 L13.5 9 L20 10.5 L13.5 12 L12 18 L10.5 12 L4 10.5 L10.5 9 Z" fill="var(--brand-soft)" />
+      </svg>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- V4a: 旧动效 (顺时针直飞)  +  V4b: 新动效 (下落+逆时针+撞击)    -->
+    <!-- ============================================================ -->
+    <div class="grid grid-cols-1 gap-6 mb-8">
+
+      <!-- V4a 旧 -->
+      <div class="sample-card bg-white rounded-3xl border border-slate-200 p-10 relative overflow-hidden min-h-[400px]">
+        <div class="absolute top-5 right-6 flex items-center gap-2">
+          <span class="text-xs text-slate-400 font-mono">V4a · 旧动效 (顺时针, 直飞)</span>
+          <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">留作对比</span>
+        </div>
+
+        <div id="stage-old" class="wordmark anim-roll-old" style="font-size: 160px;">
+          <svg class="d-svg" viewBox="0 0 130 160" width="144" height="178" style="transform: translateY(24px);">
+            <defs>
+              <linearGradient id="page-grad-old" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%"   stop-color="#ffffff"/>
+                <stop offset="100%" stop-color="#c7d5ed"/>
+              </linearGradient>
+            </defs>
+            <path d="M 18 6 L 18 154 L 64 154 C 102 154, 124 124, 124 80 C 124 36, 102 6, 64 6 Z" fill="#1e3a8a" />
+            <g transform="translate(36, 56)">
+              <path d="M 0 4 L 30 0 L 30 50 L 0 46 Z" fill="#ffffff"/>
+              <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#ffffff"/>
+              <line x1="30" y1="2" x2="30" y2="48" stroke="#1e3a8a" stroke-width="1" opacity="0.35"/>
+              <line x1="5" y1="14" x2="26" y2="12" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+              <line x1="5" y1="22" x2="27" y2="20" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+              <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+              <g class="inner-page-anim-old">
+                <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="url(#page-grad-old)" stroke="#1e3a8a" stroke-width="1.4" stroke-linejoin="round"/>
+                <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+              </g>
+            </g>
+          </svg>
+          <span class="fraunces" style="color:var(--brand);">o</span>
+          <span class="fraunces" style="color:var(--brand);">c</span>
+          <span class="fraunces" style="color:var(--brand);">u</span>
+          <span class="fraunces" style="color:var(--brand-soft);">M</span>
+          <span class="fraunces" style="color:var(--brand-soft);">a</span>
+          <span class="fraunces" style="color:var(--brand-soft);">t</span>
+          <span class="fraunces" style="color:var(--brand-soft);">e</span>
+        </div>
+        <svg id="sparkle-old" class="sparkle-anim-old" width="32" height="32" viewBox="0 0 24 24" style="display:inline-block;margin-left:-36px;transform:translateY(-140px);">
+          <path d="M12 3 L13.5 9 L20 10.5 L13.5 12 L12 18 L10.5 12 L4 10.5 L10.5 9 Z" fill="var(--brand-soft)" />
+        </svg>
+
+        <div class="flex items-center gap-3 mt-6">
+          <button onclick="replay('stage-old', 'sparkle-old')"
+                  class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium transition">
+            ↻ 重播
+          </button>
+          <span class="text-xs text-slate-400">特征: 右上飞来 + 顺时针 720° + 无下落分段</span>
+        </div>
+      </div>
+
+      <!-- V4b 新 (推荐) -->
+      <div class="sample-card bg-white rounded-3xl border-2 p-10 relative overflow-hidden min-h-[450px]" style="border-color:#1e3a8a44;">
+        <div class="absolute top-5 right-6 flex items-center gap-2">
+          <span class="text-xs text-slate-400 font-mono">V4b · 新动效 (下落 + 逆时针 + 撞击)</span>
+          <span class="text-[10px] text-white px-2 py-0.5 rounded-full font-medium" style="background:#1e3a8a;">推荐</span>
+        </div>
+
+        <div id="stage-new" class="wordmark anim-roll-fall hover-c" style="font-size: 160px;">
+          <svg class="d-svg" viewBox="0 0 130 160" width="144" height="178" style="transform: translateY(24px);">
+            <defs>
+              <linearGradient id="page-grad-new" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%"   stop-color="#ffffff"/>
+                <stop offset="100%" stop-color="#c7d5ed"/>
+              </linearGradient>
+            </defs>
+            <path d="M 18 6 L 18 154 L 64 154 C 102 154, 124 124, 124 80 C 124 36, 102 6, 64 6 Z" fill="#1e3a8a" />
+            <g transform="translate(36, 56)">
+              <path d="M 0 4 L 30 0 L 30 50 L 0 46 Z" fill="#ffffff"/>
+              <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#ffffff"/>
+              <line x1="30" y1="2" x2="30" y2="48" stroke="#1e3a8a" stroke-width="1" opacity="0.35"/>
+              <line x1="5" y1="14" x2="26" y2="12" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+              <line x1="5" y1="22" x2="27" y2="20" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+              <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+              <g class="inner-page-anim">
+                <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="url(#page-grad-new)" stroke="#1e3a8a" stroke-width="1.4" stroke-linejoin="round"/>
+                <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+              </g>
+            </g>
+          </svg>
+          <span class="fraunces" style="color:var(--brand);">o</span>
+          <span class="fraunces" style="color:var(--brand);">c</span>
+          <span class="fraunces" style="color:var(--brand);">u</span>
+          <span class="fraunces" style="color:var(--brand-soft);">M</span>
+          <span class="fraunces" style="color:var(--brand-soft);">a</span>
+          <span class="fraunces" style="color:var(--brand-soft);">t</span>
+          <span class="fraunces" style="color:var(--brand-soft);">e</span>
+        </div>
+        <svg id="sparkle-new" class="sparkle-anim-new" width="32" height="32" viewBox="0 0 24 24" style="display:inline-block;margin-left:-36px;transform:translateY(-140px);">
+          <path d="M12 3 L13.5 9 L20 10.5 L13.5 12 L12 18 L10.5 12 L4 10.5 L10.5 9 Z" fill="var(--brand-soft)" />
+        </svg>
+
+        <div class="flex items-center gap-3 mt-6">
+          <button onclick="replay('stage-new', 'sparkle-new')"
+                  class="px-4 py-2 rounded-lg text-white text-sm font-medium transition shadow-sm" style="background:#1e3a8a;">
+            ↻ 重播
+          </button>
+          <button onclick="toggleSlow()" id="slow-btn"
+                  class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm rounded-lg transition">
+            🐢 慢动作 0.4×
+          </button>
+          <span class="text-xs text-slate-400">3 阶段: 下落 → 滚 → 撞击回弹</span>
+        </div>
+
+        <!-- 时间线小图 -->
+        <div class="mt-5 pt-5 border-t border-slate-100">
+          <div class="text-xs text-slate-500 mb-2 font-mono">单字母 1100ms 时间线</div>
+          <div class="flex gap-px text-[10px] text-center">
+            <div class="flex-[28] py-1 rounded-l text-white" style="background:#3b5fb0;">阶段1 · 下落 (0-28%)</div>
+            <div class="flex-[57] py-1 text-white" style="background:#1e3a8a;">阶段2 · 滚动 (28-85%)</div>
+            <div class="flex-[8] py-1 text-white bg-rose-500">撞 (85-93%)</div>
+            <div class="flex-[7] py-1 rounded-r text-white bg-emerald-500">弹</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- V2: 中字标 + 点缀 (120px) + 新动效                             -->
+    <!-- ============================================================ -->
+    <div class="sample-card bg-white rounded-3xl border border-slate-200 p-12 mb-8 relative overflow-hidden min-h-[280px]">
+      <div class="absolute top-6 right-6 text-xs text-slate-400 font-mono">V2 · 中字标 + 周围点缀 (120px)</div>
+
+      <div class="relative inline-block">
+        <div class="absolute -top-3 left-16 flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full" style="background:var(--brand);opacity:0.3;"></span>
+          <span class="block w-8 h-px" style="background:var(--brand);opacity:0.25;"></span>
+        </div>
+        <div class="absolute -bottom-4 right-16 text-[10px] font-mono tracking-widest" style="color:var(--brand);opacity:0.4;">
+          CH.01 — 知 识 起 点
+        </div>
+
+        <div class="wordmark anim-roll-fall hover-c" style="font-size: 120px;">
+          <svg class="d-svg" viewBox="0 0 130 160" width="108" height="132" style="transform: translateY(20px);">
+            <defs>
+              <linearGradient id="page-grad-2" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%"   stop-color="#ffffff"/>
+                <stop offset="100%" stop-color="#c7d5ed"/>
+              </linearGradient>
+            </defs>
+            <path d="M 18 6 L 18 154 L 64 154 C 102 154, 124 124, 124 80 C 124 36, 102 6, 64 6 Z" fill="#1e3a8a" />
+            <g transform="translate(36, 56)">
+              <path d="M 0 4 L 30 0 L 30 50 L 0 46 Z" fill="#ffffff"/>
+              <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#ffffff"/>
+              <line x1="30" y1="2" x2="30" y2="48" stroke="#1e3a8a" stroke-width="1" opacity="0.35"/>
+              <line x1="5" y1="14" x2="26" y2="12" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+              <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+              <g class="inner-page-anim">
+                <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="url(#page-grad-2)" stroke="#1e3a8a" stroke-width="1.4" stroke-linejoin="round"/>
+                <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.45"/>
+              </g>
+            </g>
+          </svg>
+          <span class="fraunces" style="color:var(--brand);">o</span>
+          <span class="fraunces" style="color:var(--brand);">c</span>
+          <span class="fraunces" style="color:var(--brand);">u</span>
+          <span class="fraunces" style="color:var(--brand-soft);">M</span>
+          <span class="fraunces" style="color:var(--brand-soft);">a</span>
+          <span class="fraunces" style="color:var(--brand-soft);">t</span>
+          <span class="fraunces" style="color:var(--brand-soft);">e</span>
+        </div>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-10 font-mono">用法: 关于页 / banner</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- V3: header 小字标 · 静态                                       -->
+    <!-- ============================================================ -->
+    <div class="sample-card bg-white rounded-3xl border border-slate-200 p-8 mb-8 relative overflow-hidden">
+      <div class="absolute top-5 right-6 text-xs text-slate-400 font-mono">V3 · header (32px) · 静态</div>
+
+      <div class="border border-slate-200 rounded-xl p-3 flex items-center gap-3 bg-slate-50/50">
+        <div class="wordmark" style="font-size: 32px;">
+          <svg class="d-svg" viewBox="0 0 130 160" width="29" height="35" style="transform: translateY(6px);">
+            <path d="M 18 6 L 18 154 L 64 154 C 102 154, 124 124, 124 80 C 124 36, 102 6, 64 6 Z" fill="#1e3a8a" />
+            <g transform="translate(40, 60)">
+              <rect x="0" y="0" width="56" height="42" fill="#ffffff" rx="2"/>
+              <line x1="28" y1="2" x2="28" y2="40" stroke="#1e3a8a" stroke-width="2" opacity="0.4"/>
+            </g>
+          </svg>
+          <span class="fraunces" style="color:var(--brand);">ocu</span>
+          <span class="fraunces" style="color:var(--brand-soft);">Mate</span>
+        </div>
+        <div class="flex-1"></div>
+        <span class="text-xs text-slate-400">(40px App header 不需要 hero 动效)</span>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- V5: 反白版 (深底) + 新动效                                     -->
+    <!-- ============================================================ -->
+    <div class="sample-card rounded-3xl border p-12 mb-8 relative overflow-hidden min-h-[360px]" style="background:#1e3a8a;border-color:#1e3a8a;">
+      <div class="absolute top-6 right-6 text-xs text-white/40 font-mono">V5 · 反白版 · 新动效</div>
+
+      <div class="wordmark anim-roll-fall hover-c" style="font-size: 180px;">
+        <svg class="d-svg" viewBox="0 0 130 160" width="162" height="200" style="transform: translateY(28px);">
+          <defs>
+            <linearGradient id="page-grad-5" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%"   stop-color="#dbe4f7"/>
+              <stop offset="100%" stop-color="#6b85d4"/>
+            </linearGradient>
+          </defs>
+          <path d="M 18 6 L 18 154 L 64 154 C 102 154, 124 124, 124 80 C 124 36, 102 6, 64 6 Z" fill="#ffffff" />
+          <g transform="translate(36, 56)">
+            <path d="M 0 4 L 30 0 L 30 50 L 0 46 Z" fill="#1e3a8a"/>
+            <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="#1e3a8a"/>
+            <line x1="30" y1="2" x2="30" y2="48" stroke="#ffffff" stroke-width="1" opacity="0.5"/>
+            <line x1="5" y1="14" x2="26" y2="12" stroke="#ffffff" stroke-width="0.9" opacity="0.55"/>
+            <line x1="5" y1="22" x2="27" y2="20" stroke="#ffffff" stroke-width="0.9" opacity="0.55"/>
+            <line x1="34" y1="12" x2="56" y2="14" stroke="#ffffff" stroke-width="0.9" opacity="0.55"/>
+            <g class="inner-page-anim">
+              <path d="M 30 0 L 60 4 L 60 46 L 30 50 Z" fill="url(#page-grad-5)" stroke="#1e3a8a" stroke-width="1.4" stroke-linejoin="round"/>
+              <line x1="34" y1="12" x2="56" y2="14" stroke="#1e3a8a" stroke-width="0.9" opacity="0.55"/>
+            </g>
+          </g>
+        </svg>
+        <span class="fraunces text-white">o</span>
+        <span class="fraunces text-white">c</span>
+        <span class="fraunces text-white">u</span>
+        <span class="fraunces" style="color:#a5b8e1;">M</span>
+        <span class="fraunces" style="color:#a5b8e1;">a</span>
+        <span class="fraunces" style="color:#a5b8e1;">t</span>
+        <span class="fraunces" style="color:#a5b8e1;">e</span>
+      </div>
+      <svg class="sparkle-anim-new" width="34" height="34" viewBox="0 0 24 24" style="display:inline-block;margin-left:-40px;transform:translateY(-160px);">
+        <path d="M12 3 L13.5 9 L20 10.5 L13.5 12 L12 18 L10.5 12 L4 10.5 L10.5 9 Z" fill="#ffffff" opacity="0.8"/>
+      </svg>
+    </div>
+
+    <!-- 检视 -->
+    <div class="mt-10 bg-blue-50 border rounded-2xl p-5" style="border-color:#1e3a8a33;">
+      <div class="font-semibold mb-2" style="color:#1e3a8a;">✓ 字标完整动效已就绪 · 入场 + Hover</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div>
+          <div class="text-slate-500 text-xs uppercase tracking-wider mb-1">入场动效 · V4b 下落+逆时针+撞击</div>
+          <ul class="text-slate-700 space-y-1 list-disc list-inside">
+            <li>3 阶段: 下落 → 逆时针滚 → 撞击回弹</li>
+            <li>单只 1100ms · 整套 ~3s</li>
+            <li>D 内部翻书延迟到 3.8s 启动 (静默期等动画完)</li>
+            <li>页面加载/刷新时自动播放 1 次</li>
+          </ul>
+        </div>
+        <div>
+          <div class="font-semibold text-xs uppercase tracking-wider mb-1" style="color:#1e3a8a;">Hover 动效 · C 灵动派 (新加)</div>
+          <ul class="text-slate-700 space-y-1 list-disc list-inside">
+            <li>每个字母独立 rotate ±3° + 微抬 2px</li>
+            <li>stagger 60ms · wave 700ms 循环</li>
+            <li>D 字母也跟着摇晃 (含内嵌书一起摆)</li>
+            <li>鼠标离开 200ms 平滑回到静态</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-4 bg-amber-50 border border-amber-200 rounded-2xl p-5">
+      <div class="font-semibold text-amber-900 mb-2">📋 试一下完整体验</div>
+      <div class="text-amber-800 text-sm leading-relaxed space-y-1.5">
+        <p>1. 刷新页面 → 看入场动画 (~3s 完成, 字母滚动撞击)</p>
+        <p>2. 等字标稳定后, <strong>鼠标移到任意大字标上 (V1 / V2 / V4b / V5)</strong> → 看每个字母波浪摇晃</p>
+        <p>3. 鼠标移开 → 字母平滑回到静态</p>
+        <p class="mt-2 font-medium">如果摇晃幅度或速度想调:</p>
+        <ul class="list-disc list-inside ml-2 mt-1">
+          <li>幅度 ±3° 太大 / 太小?</li>
+          <li>微抬 2px 够 / 不够?</li>
+          <li>stagger 60ms 间隔太挤 / 太松?</li>
+          <li>整体 700ms 循环太快 / 太慢?</li>
+        </ul>
+        <p class="mt-2"><strong>字标基本完成. 下一步:</strong> 把它整合到 LoginPage v2 整页设计?</p>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function replay(stageId, sparkleId) {
+      const stage = document.getElementById(stageId);
+      const sparkle = sparkleId ? document.getElementById(sparkleId) : null;
+      [stage, sparkle].filter(Boolean).forEach(el => {
+        const items = [el, ...el.querySelectorAll('*')];
+        items.forEach(c => { c.style.animation = 'none'; });
+        void el.offsetWidth;
+        items.forEach(c => { c.style.animation = ''; });
+      });
+    }
+
+    // 慢动作 (仅对 V4b 新动效)
+    let slow = false;
+    function toggleSlow() {
+      slow = !slow;
+      const btn = document.getElementById('slow-btn');
+      btn.textContent = slow ? '⏩ 正常速度' : '🐢 慢动作 0.4×';
+      const stage = document.getElementById('stage-new');
+      const sparkle = document.getElementById('sparkle-new');
+      const factor = slow ? 2.5 : 1;
+      [stage, sparkle].forEach(el => {
+        const items = [el, ...el.querySelectorAll('*')];
+        items.forEach(c => { c.style.animation = 'none'; });
+      });
+      void stage.offsetWidth;
+      [stage, sparkle].forEach(el => {
+        const items = [el, ...el.querySelectorAll('*')];
+        items.forEach(c => {
+          c.style.animation = '';
+          const cs = getComputedStyle(c);
+          if (cs.animationDuration && cs.animationDuration !== '0s') {
+            const durs = cs.animationDuration.split(',').map(d => parseFloat(d) * 1000 * factor + 'ms').join(', ');
+            c.style.animationDuration = durs;
+            const dels = cs.animationDelay.split(',').map(d => parseFloat(d) * 1000 * factor + 'ms').join(', ');
+            c.style.animationDelay = dels;
+          }
+        });
+      });
+    }
+  </script>
+
+</body>
+</html>
