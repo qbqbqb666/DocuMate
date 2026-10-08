@@ -13,6 +13,7 @@ import { LoginPage } from './LoginPage'
 import { RegisterPage } from './RegisterPage'
 import { BrandMark } from '../components/BrandMark'
 import { AuthAPI, AuthError } from './AuthClient'
+import { UpdateGate } from '../components/UpdateGate'
 
 export function AuthGuard({ children }: { children: ReactNode }) {
   const { status, user, accessToken, refreshUser } = useAuth()
@@ -30,7 +31,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     )
   }
 
-  return <><>{children}</><Onboarding user={user} accessToken={accessToken} onRefresh={refreshUser} /></>
+  return <UpdateGate>{children}<Onboarding user={user} accessToken={accessToken} onRefresh={refreshUser} /></UpdateGate>
 }
 
 

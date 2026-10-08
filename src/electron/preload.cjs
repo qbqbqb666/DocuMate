@@ -3,6 +3,13 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('documate', {
   version: ipcRenderer.sendSync('app:get-version'),
   platform: process.platform,
+  checkForUpdates: () => ipcRenderer.invoke('updates:check'),
+  startUpdate: () => ipcRenderer.invoke('updates:start'),
+  onUpdateState: (callback) => {
+    const listener = (_event, state) => callback(state)
+    ipcRenderer.on('updates:state', listener)
+    return () => ipcRenderer.removeListener('updates:state', listener)
+  },
   pickFolder: (options) => ipcRenderer.invoke('workspace:pick-folder', options),
   openFolder: (folderPath) => ipcRenderer.invoke('shell:open-folder', folderPath),
   openFile: (filePath) => ipcRenderer.invoke('shell:open-file', filePath),

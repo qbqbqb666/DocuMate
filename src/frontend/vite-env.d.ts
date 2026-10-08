@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+import type { UpdateState } from './components/UpdateGate'
 
 interface ImportMetaEnv {
   readonly VITE_AUTH_SERVICE_URL?: string
@@ -12,6 +13,9 @@ interface ImportMeta {
 interface DocuMateAPI {
   version: string
   platform: NodeJS.Platform
+  checkForUpdates: () => Promise<UpdateState>
+  startUpdate: () => Promise<UpdateState>
+  onUpdateState: (callback: (state: UpdateState) => void) => () => void
   pickFolder: (options?: {
     title?: string
     buttonLabel?: string

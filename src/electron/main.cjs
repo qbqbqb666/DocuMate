@@ -3,6 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { BackendProcessManager } = require('./backend-process.cjs')
 const { SecureTokenStore } = require('./secure-token-store.cjs')
+const { UpdateManager } = require('./update-manager.cjs')
 
 const BACKEND_HOST = '127.0.0.1'
 const BACKEND_PORT = 8765
@@ -14,6 +15,7 @@ let watchedWorkspace = null
 let debounceTimer = null
 let quitAfterBackendStops = false
 let refreshTokens = null
+let updates = null
 
 function projectRoot() {
   return path.resolve(__dirname, '..', '..')
@@ -153,10 +155,29 @@ ipcMain.handle('auth:load-refresh-token', () => refreshTokens?.load() || null)
 ipcMain.handle('auth:save-refresh-token', (_event, token) => refreshTokens?.save(String(token || '')) || false)
 ipcMain.handle('auth:clear-refresh-token', () => refreshTokens?.clear() || false)
 ipcMain.on('app:get-version', (event) => { event.returnValue = app.getVersion() })
+for (const [channel, method] of [['updates:check', 'check'], ['updates:start', 'start']]) {
+  ipcMain.handle(channel, (event) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) {
+      throw new Error('无效的更新请求')
+    }
+    return updates[method]()
+  })
+}
 
 app.whenReady().then(async () => {
   refreshTokens = new SecureTokenStore(path.join(app.getPath('userData'), 'auth', 'refresh-token'), safeStorage)
   backend = createBackendManager()
+  updates = new UpdateManager({
+    updater: process.platform === 'win32' && app.isPackaged ? require('electron-updater').autoUpdater : null,
+    beforeInstall: async () => {
+      stopWorkspaceWatcher()
+      await backend.stop()
+      quitAfterBackendStops = true
+    },
+  })
+  updates.on('state', (state) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('updates:state', state)
+  })
   try {
     await backend.start()
     createWindow()
