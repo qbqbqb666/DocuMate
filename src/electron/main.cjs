@@ -4,6 +4,7 @@ const path = require('node:path')
 const { BackendProcessManager } = require('./backend-process.cjs')
 const { SecureTokenStore } = require('./secure-token-store.cjs')
 const { UpdateManager } = require('./update-manager.cjs')
+const { MacUpdateManager } = require('./mac-update-manager.cjs')
 
 const BACKEND_HOST = '127.0.0.1'
 const BACKEND_PORT = 8765
@@ -167,7 +168,24 @@ for (const [channel, method] of [['updates:check', 'check'], ['updates:start', '
 app.whenReady().then(async () => {
   refreshTokens = new SecureTokenStore(path.join(app.getPath('userData'), 'auth', 'refresh-token'), safeStorage)
   backend = createBackendManager()
-  updates = new UpdateManager({
+  updates = process.platform === 'darwin' && app.isPackaged ? new MacUpdateManager({
+    version: app.getVersion(),
+    showPrompt: async ({ version, notes }) => {
+      const result = await dialog.showMessageBox(mainWindow, {
+        type: 'info', title: 'DocuMate 更新',
+        message: `发现新版本 v${version}`,
+        detail: `当前版本 v${app.getVersion()}。点击“更新”打开下载网页。下载新版 ZIP 后，请退出 DocuMate，将新应用拖到“应用程序”文件夹并选择“替换”。${notes ? '\n\n' + notes : ''}`,
+        buttons: ['更新', '稍后'], defaultId: 0, cancelId: 1, noLink: true,
+      })
+      return result.response === 0
+    },
+    openDownloadPage: async (url) => {
+      try { await shell.openExternal(url) }
+      catch (error) {
+        dialog.showErrorBox('无法打开下载页面', `请在浏览器中访问 ${url}\n${error.message}`)
+      }
+    },
+  }) : new UpdateManager({
     updater: process.platform === 'win32' && app.isPackaged ? require('electron-updater').autoUpdater : null,
     beforeInstall: async () => {
       stopWorkspaceWatcher()

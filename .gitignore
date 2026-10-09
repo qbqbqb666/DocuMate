@@ -60,3 +60,6 @@ desktop.ini
 
 # 当前开发实验 Notebook（含本机绝对路径和执行输出）
 agent_learning.ipynb
+
+# 本机打包指令备忘
+/每次打包指令.txt

@@ -5,6 +5,7 @@ import io
 import json
 from pathlib import Path
 import struct
+import subprocess
 import zipfile
 
 import pytest
@@ -12,6 +13,31 @@ import pytest
 from scripts.package_windows import (
     MACHINES, ROOT, builder_config, check_pe, make_arm_wheel, patch_arm_popcount,
 )
+from scripts import package_windows
+
+
+@pytest.mark.parametrize("returncode", [0, 1])
+def test_arm_environment_preserves_cmd_quotes_and_reports_errors(monkeypatch, returncode):
+    installation = r"C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools"
+    monkeypatch.setattr(Path, "is_file", lambda _: True)
+    monkeypatch.setattr(package_windows, "run", lambda *args, **kwargs: installation)
+    calls = []
+
+    def invoke(command, **kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(
+            command, returncode, stdout="Developer Command Prompt\nPATH=C:\\compiler\n",
+            stderr="missing SDK" if returncode else "",
+        )
+
+    monkeypatch.setattr(package_windows.subprocess, "run", invoke)
+    if returncode:
+        with pytest.raises(RuntimeError, match="missing SDK"):
+            package_windows.arm_compiler_environment()
+    else:
+        assert package_windows.arm_compiler_environment()["PATH"] == r"C:\compiler"
+    vcvars = Path(installation) / "VC/Auxiliary/Build/vcvarsall.bat"
+    assert calls == [f'cmd.exe /d /s /c "call "{vcvars}" amd64_arm64 && set"']
 
 
 def test_patch_preserves_64_bit_hamming_input():

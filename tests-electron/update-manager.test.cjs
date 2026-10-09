@@ -27,7 +27,7 @@ test('发现新版仅显示界面，点击才下载，先关闭后端再安装',
   assert.ok(states.some((value) => value.percent === 45))
 })
 
-test('没有新版放行；macOS/开发模式不检查', async () => {
+test('没有新版放行；禁用自动更新时不检查', async () => {
   assert.equal((await fixture({ isUpdateAvailable: false }).manager.check()).status, 'allowed')
   assert.equal((await new UpdateManager({ updater: null }).check()).status, 'allowed')
 })

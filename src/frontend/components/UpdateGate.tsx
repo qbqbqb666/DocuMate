@@ -13,7 +13,7 @@ export function UpdateGate({ children }: { children: ReactNode }) {
   const [state, setState] = useState<UpdateState>({ status: 'checking', version: '', notes: '', percent: 0 })
   useEffect(() => {
     const desktop = window.documate
-    if (!desktop || desktop.platform !== 'win32') {
+    if (!desktop || !['win32', 'darwin'].includes(desktop.platform)) {
       setState((value) => ({ ...value, status: 'allowed' }))
       return
     }
@@ -21,6 +21,10 @@ export function UpdateGate({ children }: { children: ReactNode }) {
     const receive = (value: UpdateState) => { if (active) setState(value) }
     const unsubscribe = desktop.onUpdateState(receive)
     void desktop.checkForUpdates().then(receive).catch(() => {
+      if (desktop.platform === 'darwin') {
+        if (active) setState((value) => ({ ...value, status: 'allowed' }))
+        return
+      }
       // IPC failure is not evidence that no update exists; do not bypass the gate.
       if (active) setState((value) => ({ ...value, status: 'error', message: '更新服务未响应，请关闭应用后重新打开。' }))
     })

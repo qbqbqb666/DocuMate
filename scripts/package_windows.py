@@ -91,7 +91,17 @@ def arm_compiler_environment():
         raise RuntimeError("未找到 MSVC ARM64 工具。请在 Visual Studio Installer 中添加 C++ ARM64/ARM64EC 工具和 Windows SDK。")
     vcvars = Path(installation) / "VC/Auxiliary/Build/vcvarsall.bat"
     # x64-hosted compiler also runs under Windows ARM emulation.
-    output = run(["cmd.exe", "/d", "/s", "/c", f'""{vcvars}" amd64_arm64 >nul && set"'], capture=True)
+    # cmd.exe needs shell quoting, not list2cmdline's C-runtime quote escaping.
+    command = f'cmd.exe /d /s /c "call "{vcvars}" amd64_arm64 && set"'
+    print("\n> " + command, flush=True)
+    completed = subprocess.run(
+        command, cwd=ROOT, text=True, encoding="utf-8", errors="replace",
+        capture_output=True,
+    )
+    if completed.returncode != 0:
+        detail = "\n".join(filter(None, [completed.stdout.strip(), completed.stderr.strip()]))
+        raise RuntimeError(f"ARM64 编译环境初始化失败：\n{detail or completed.returncode}")
+    output = completed.stdout
     env = os.environ.copy()
     for line in output.splitlines():
         key, separator, value = line.partition("=")

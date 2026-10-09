@@ -4,7 +4,7 @@
 
 - x64：`http://1.14.67.230/documate-updates/windows-x64/`
 - ARM64：`http://1.14.67.230/documate-updates/windows-arm64/`
-- macOS、浏览器预览和未打包的开发模式不检查更新。
+- macOS 不使用 Windows 更新源，通过独立的 `mac-version.json` 提示手动更新；浏览器预览和未打包的开发模式不检查更新。
 
 登录（含恢复登录）成功后检查，主界面和新用户引导在检查后才加载。
 有新版先显示更新界面，点击“立即更新”后才下载；没有跳过按钮。
@@ -39,7 +39,9 @@ npm.cmd run package:win:arm64
 Nginx 配置修改前备份，`nginx -t` 成功后 reload，保留现有认证反向代理。
 本次已部署目录和 Nginx 路由；原站点配置备份在服务器
 `/etc/nginx/sites-available/default.before-documate-updates-6Tq8oq`。
-尚未上传 0.4.1 Windows 安装包；需在 Windows 构建、验收后发布。
+2026-10-09 已发布 Windows x64 0.4.1 安装包、blockmap 和 `latest.yml`，文件校验一致且公网可读取。
+已用真实 Generic 更新器验证同版放行、模拟低版本发现新版，以及检查时不预下载。
+ARM64 尚未发布；Windows 安装覆盖、重启和用户数据保留仍需实机验收。
 没有安装包时不要发布虚假的 latest.yml；404 会按检查失败放行。
 
 每次发布提高版本号，先上传 `.exe`、`.exe.blockmap`，校验文件后，
