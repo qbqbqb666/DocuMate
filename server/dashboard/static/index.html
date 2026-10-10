@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DocuMate · 数据看板</title>
+  <link rel="stylesheet" href="/dashboard.css">
+  <script src="/dashboard.js" defer></script>
+</head>
+<body>
+  <section id="login" class="login-screen">
+    <div class="login-story"><a class="story-brand" href="/"><svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><rect width="48" height="48" rx="14" fill="#1E3A8A"/><path d="M14 11.5h12.4c5.3 0 9.6 4.3 9.6 9.6v5.8c0 5.3-4.3 9.6-9.6 9.6H14V11.5Z" stroke="white" stroke-width="2.5" stroke-linejoin="round"/><path d="M14 11.5v25M19.5 18h10M19.5 23.5h10M19.5 29h7" stroke="white" stroke-width="2.3" stroke-linecap="round"/><path d="M30 11.5v7.7h5.8" stroke="white" stroke-width="2.5" stroke-linejoin="round"/></svg><span>DocuMate</span></a><div class="story-copy"><div class="eyebrow">DOCUMATE / DATA STUDIO</div><h2>Docu<span>Mate.</span></h2><h3>每一次成长，<br>都有迹可循。</h3><p>从新用户的加入，到每一次登录。<br>在一个清晰的视图里，了解产品的日常。</p><div class="story-grid"><div><b>01</b><span>用户概览</span></div><div><b>02</b><span>会话记录</span></div><div><b>03</b><span>辅助工具</span></div></div></div><div class="story-footer">YOUR DOCUMENT COMPANION <span>数据看板</span></div></div>
+    <form id="login-form" class="login-card">
+      <div class="brand-icon"><svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><rect width="48" height="48" rx="14" fill="#1E3A8A"/><path d="M14 11.5h12.4c5.3 0 9.6 4.3 9.6 9.6v5.8c0 5.3-4.3 9.6-9.6 9.6H14V11.5Z" stroke="white" stroke-width="2.5" stroke-linejoin="round"/><path d="M14 11.5v25M19.5 18h10M19.5 23.5h10M19.5 29h7" stroke="white" stroke-width="2.3" stroke-linecap="round"/><path d="M30 11.5v7.7h5.8" stroke="white" stroke-width="2.5" stroke-linejoin="round"/></svg></div><div class="eyebrow">DOCUMATE / ADMIN</div>
+      <h1>欢迎回来。</h1><p class="muted">登录只读看板，查看用户与登录会话。</p>
+      <label for="username">看板账号</label><input id="username" autocomplete="username" required maxlength="128">
+      <label for="password">看板密码</label><input id="password" type="password" autocomplete="current-password" required maxlength="256">
+      <p id="login-error" class="error" role="alert"></p>
+      <button id="login-button" type="submit" class="primary">登录看板 →</button>
+      <div class="login-note">只读连接 · 不支持修改数据库内容</div>
+    </form>
+  </section>
+  <div id="board" hidden>
+    <header><div class="brand"><span class="brand-icon small"><svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><rect width="48" height="48" rx="14" fill="#1E3A8A"/><path d="M14 11.5h12.4c5.3 0 9.6 4.3 9.6 9.6v5.8c0 5.3-4.3 9.6-9.6 9.6H14V11.5Z" stroke="white" stroke-width="2.5" stroke-linejoin="round"/><path d="M14 11.5v25M19.5 18h10M19.5 23.5h10M19.5 29h7" stroke="white" stroke-width="2.3" stroke-linecap="round"/><path d="M30 11.5v7.7h5.8" stroke="white" stroke-width="2.5" stroke-linejoin="round"/></svg></span><strong>DocuMate</strong><span class="divider"></span><span class="muted">数据看板</span></div>
+      <div class="header-actions"><span class="readonly">只读模式</span><span id="admin-name"></span><button id="logout">退出</button></div>
+    </header>
+    <main>
+      <div class="intro"><div><div class="eyebrow">DOCUMATE / DATABASE OVERVIEW</div><h1><span class="overview-wordmark">DocuMate.</span> 数据概览</h1><p class="muted">关注每一次加入，了解每一次连接。用户与登录会话，每 10 秒自动刷新。</p></div>
+        <div class="sync"><span id="updated" class="muted" aria-live="polite">正在读取…</span><button id="refresh">↻ 手动刷新</button></div>
+      </div>
+      <p id="board-error" class="error" role="alert" hidden></p>
+      <section class="metrics" aria-label="统计概览">
+        <article><div class="metric-top"><span>用户规模</span><b aria-hidden="true">01 / USERS</b></div><span>注册用户总数</span><strong id="total-users">—</strong><small>所有已注册账号</small></article>
+        <article><div class="metric-top"><span>账号状态</span><b aria-hidden="true">02 / ACTIVE</b></div><span>可用账号</span><strong id="active-users">—</strong><small>状态为 active</small></article>
+        <article><div class="metric-top"><span>每日增长</span><b aria-hidden="true">03 / TODAY</b></div><span>今日新增用户</span><strong id="today-users">—</strong><small>北京时间 00:00 起</small></article>
+        <article class="accent"><div class="metric-top"><span>会话概览</span><b aria-hidden="true">04 / SESSIONS</b></div><span>有效登录会话</span><strong id="valid-sessions">—</strong><small>未撤销、未过期；不代表在线人数</small></article>
+      </section>
+      <section class="data-panel"><div class="panel-heading"><div><span class="eyebrow">EXPLORE YOUR DATA</span><h2>记录，每一份连接</h2></div><span class="panel-tag">用户 / 登录会话</span></div>
+        <div class="panel-toolbar"><nav aria-label="数据类型"><button class="tab selected" id="users-tab">用户列表 <span id="users-count">0</span></button><button class="tab" id="sessions-tab">登录会话 <span id="sessions-count">0</span></button></nav>
+          <form id="search-form"><input id="search" type="search" placeholder="按用户名搜索" aria-label="按用户名搜索" maxlength="128"><button type="submit">搜索</button></form>
+        </div>
+        <div class="table-scroll"><table><thead id="table-head"></thead><tbody id="table-body"></tbody></table></div>
+        <div class="panel-footer"><span id="page-info" class="muted"></span><div><button id="previous">← 上一页</button><button id="next">下一页 →</button></div></div>
+      </section>
+      <section class="hash-panel" aria-labelledby="hash-heading">
+        <div class="hash-heading"><div class="tool-icon" aria-hidden="true">#</div><div><span class="eyebrow">UTILITY / ARGON2ID</span><h2 id="hash-heading">密码转哈希</h2></div></div><div><p class="muted">生成可填入 password_hash 的 Argon2id 哈希，不创建用户、不修改数据库。</p></div>
+        <form id="hash-form"><label for="hash-password">新用户的应用登录密码</label><div class="hash-controls"><input id="hash-password" type="password" autocomplete="new-password" minlength="6" maxlength="128" required placeholder="输入 6 至 128 个字符"><button id="hash-generate" type="submit">生成哈希</button></div></form>
+        <p id="hash-message" class="muted" role="status"></p>
+        <div id="hash-result" hidden><label for="hash-output">生成结果（完整复制）</label><textarea id="hash-output" readonly rows="3" spellcheck="false"></textarea><div class="hash-actions"><button id="hash-copy" type="button">复制哈希</button><button id="hash-clear" type="button">清空</button></div></div>
+        <p class="hash-note">密码仅用于本次计算，不保存；每次生成结果不同是正常的，哈希不能还原成密码。</p>
+      </section>
+      <footer>数据源：documate_auth · users / refresh_sessions<span>数据库中的密码哈希和令牌不对外展示</span></footer>
+    </main>
+  </div>
+</body>
+</html>

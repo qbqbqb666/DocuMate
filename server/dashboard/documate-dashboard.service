@@ -1,0 +1,20 @@
+[Unit]
+Description=DocuMate read-only database dashboard
+After=network.target postgresql.service
+
+[Service]
+User=documate-dashboard
+Group=documate-dashboard
+WorkingDirectory=/opt/documate-dashboard
+EnvironmentFile=/etc/documate-dashboard/dashboard.env
+ExecStart=/opt/documate-dashboard/.venv/bin/uvicorn app:create_app --factory --host 0.0.0.0 --port 8081 --no-proxy-headers
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
