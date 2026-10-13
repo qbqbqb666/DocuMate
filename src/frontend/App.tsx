@@ -8,7 +8,6 @@ import { UploadZone } from './components/UploadZone'
 import { DocumentSidebar } from './components/DocumentSidebar'
 import { SearchPanel } from './components/SearchPanel'
 import { ChatPanel } from './components/ChatPanel'
-import { WorkspacePicker } from './components/WorkspacePicker'
 import { ProjectSidebar } from './components/ProjectSidebar'
 import { NewConversationPage } from './components/NewConversationPage'
 import { BrandMark } from './components/BrandMark'
@@ -169,8 +168,6 @@ function App() {
     }
   }
 
-  const needsWorkspacePicker = !workspace.loading && workspace.info != null && !workspace.info.is_user_set
-  if (needsWorkspacePicker) return <WorkspacePicker onPicked={() => { workspace.refresh(); refreshDocs() }} />
   if (workspace.loading || !workspace.info) return <LoadingWorkspace />
 
   const workspaceName = workspace.info.path.split('/').filter(Boolean).at(-1) || '我的工作区'
@@ -231,7 +228,7 @@ function App() {
 
       {showSearch && <div className="dm-search-overlay"><button className="dm-scrim" aria-label="关闭搜索" onClick={() => setShowSearch(false)} /><section className="dm-search-sheet"><div className="dm-sheet-title"><div><Icon name="search" size={19} />搜索资料</div><button className="dm-icon-button" onClick={() => setShowSearch(false)}><Icon name="close" /></button></div><SearchPanel onJumpToDoc={handleJumpToDoc} /></section></div>}
       {showApiKeyDialog && <ApiKeyDialog value={apiKeyInput} provider={apiProvider} error={apiKeyError} saving={apiKeySaving} onChange={setApiKeyInput} onCancel={() => setShowApiKeyDialog(false)} onSave={() => void saveApiKey()} />}
-      {showProfile && <ProfileDrawer name={displayName} account={user?.username || ''} localMode={localMode} apiKeys={apiKeyStatuses} stats={stats.stats} onClose={() => setShowProfile(false)} onLogout={logout} onNotice={notify} onConfigureApiKey={(provider) => openApiKeyDialog(provider)} onDeleteApiKey={async (provider) => {
+      {showProfile && <ProfileDrawer name={displayName} account={user?.email || user?.username || ''} localMode={localMode} apiKeys={apiKeyStatuses} stats={stats.stats} onClose={() => setShowProfile(false)} onLogout={logout} onNotice={notify} onConfigureApiKey={(provider) => openApiKeyDialog(provider)} onDeleteApiKey={async (provider) => {
         if (!accessToken || !window.confirm(`删除已保存的 ${provider === 'deepseek' ? 'DeepSeek' : 'SiliconFlow'} API Key？`)) return
         try { await AuthAPI.deleteApiKey(provider, accessToken); setApiKeyStatuses((items) => items.map((item) => item.provider === provider ? { ...item, configured: false, last4: null } : item)); notify('API Key 已删除') } catch (error) { notify(error instanceof Error ? error.message : 'API Key 删除失败') }
       }} />}

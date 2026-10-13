@@ -14,6 +14,9 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    email: Mapped[str | None] = mapped_column(String(254), unique=True, nullable=True)
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    auth_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     status: Mapped[str] = mapped_column(String(16), default="active")
     seen_welcome: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -38,8 +41,32 @@ class RefreshSession(Base):
     user: Mapped[User] = relationship(back_populates="sessions")
 
 
-def create_session_factory(database_url: str):
+class EmailChallenge(Base):
+    __tablename__ = "email_challenges"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    email: Mapped[str] = mapped_column(String(254), index=True)
+    purpose: Mapped[str] = mapped_column(String(16))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    auth_version: Mapped[int] = mapped_column(Integer, default=0)
+    code_hash: Mapped[str] = mapped_column(String(64))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    delivered: Mapped[bool] = mapped_column(Boolean, default=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AuthRateBucket(Base):
+    __tablename__ = "auth_rate_buckets"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+def create_session_factory(database_url: str, *, initialize: bool = False):
     connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
     engine = create_engine(database_url, pool_pre_ping=True, connect_args=connect_args)
-    Base.metadata.create_all(engine)
+    if initialize:
+        Base.metadata.create_all(engine)
     return sessionmaker(bind=engine, expire_on_commit=False)

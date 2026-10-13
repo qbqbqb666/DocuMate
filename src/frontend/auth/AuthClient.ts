@@ -13,6 +13,8 @@ const LOCAL_BASE = (import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8765')
 export interface UserInfo {
   id: number
   username: string
+  email: string | null
+  email_verified: boolean
   display_name: string | null
   has_api_key: boolean
   sf_api_key_last4: string | null
@@ -36,8 +38,18 @@ export interface ApiKeyStatus {
   last4: string | null
 }
 
+export interface EmailPasswordCredentials {
+  email: string
+  password: string
+}
+
+export interface EmailCredentials extends EmailPasswordCredentials {
+  verification_id: string
+  code: string
+}
+
 export class AuthError extends Error {
-  constructor(public status: number, public detail: string) {
+  constructor(public status: number, public detail: string, public retryAfter = 0) {
     super(detail)
     this.name = 'AuthError'
   }
@@ -78,7 +90,7 @@ async function request<T>(
     } catch {
       if (text) detail = text.slice(0, 300)
     }
-    throw new AuthError(resp.status, detail)
+    throw new AuthError(resp.status, detail, Number(resp.headers.get("Retry-After")) || 0)
   }
 
   if (resp.status === 204 || !text) return undefined as T
@@ -90,18 +102,27 @@ async function request<T>(
 // ============================================================
 
 export const AuthAPI = {
-  health: () => request<{ ok: boolean }>('/health'),
+  health: () => request<{ status: string; email_ready: boolean }>('/health'),
 
-  register: (username: string, password: string) =>
-    request<AuthResponse>('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
+  sendEmailCode: (email: string, purpose: 'register' | 'login' | 'reset', password?: string) =>
+    request<{ verification_id: string; expires_in: number; retry_after: number; message: string }>('/api/auth/email-code', {
+      method: 'POST', body: JSON.stringify({ email, purpose, ...(purpose === 'login' ? { password } : {}) }),
     }),
 
-  login: (username: string, password: string) =>
+  resetPassword: (payload: EmailCredentials) => request<void>('/api/auth/reset-password', {
+    method: 'POST', body: JSON.stringify(payload),
+  }),
+
+  register: (payload: EmailCredentials) =>
+    request<AuthResponse>('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  login: (payload: EmailPasswordCredentials) =>
     request<AuthResponse>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify(payload),
     }),
 
   refresh: (refresh_token: string) =>

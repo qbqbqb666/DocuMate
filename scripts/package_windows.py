@@ -41,6 +41,19 @@ def run(args, *, cwd=ROOT, capture=False, env=None):
 
 def download(url):
     print(f"下载 {url}", flush=True)
+    if sys.platform == "win32":
+        curl = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/curl.exe"
+        if not curl.is_file():
+            raise RuntimeError("未找到 Windows 系统 curl.exe，无法下载 ARM64 编译依赖")
+        result = subprocess.run(
+            [str(curl), "--fail", "--location", "--silent", "--show-error",
+             "--retry", "2", "--connect-timeout", "20", "--max-time", "120",
+             "--user-agent", "DocuMate-build", url],
+            capture_output=True,
+        )
+        if result.returncode:
+            raise RuntimeError(f"下载失败：{url}\n{result.stderr.decode('utf-8', errors='replace')}")
+        return result.stdout
     request = urllib.request.Request(url, headers={"User-Agent": "DocuMate-build"})
     with urllib.request.urlopen(request, timeout=120) as response:
         return response.read()
@@ -256,10 +269,16 @@ def main():
     work.mkdir(parents=True, exist_ok=True)
     wheel = build_sqlite_vec(work / "sqlite-vec", env) if args.arch == "arm64" else None
     interpreter = sys.executable if args.arch == "arm64" else "cpython-3.14-windows-x86_64-none"
-    venv = work / "venv"
+    venv = work / ("venv" if args.arch == "arm64" else "venv-x64-cpython")
     python = venv / "Scripts/python.exe"
     if not python.exists():
-        run([*uv, "venv", "--python", interpreter, venv])
+        if args.arch == "x64":
+            run([*uv, "python", "install", interpreter])
+            interpreter = run([*uv, "python", "find", "--managed-python", interpreter], capture=True).strip()
+            check_pe(interpreter, args.arch)
+            run([interpreter, "-m", "venv", "--without-pip", venv])
+        else:
+            run([*uv, "venv", "--python", interpreter, venv])
     check_pe(python, args.arch)
     requirements = work / "requirements.txt"
     export = [*uv, "export", "--frozen", "--no-emit-project", "--no-hashes", "--output-file", requirements]

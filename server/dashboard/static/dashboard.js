@@ -1,6 +1,6 @@
 "use strict";
 const $ = id => document.getElementById(id);
-let selected = "users", userPage = 1, sessionPage = 1, query = "", snapshot = null;
+let userPage = 1, query = "", snapshot = null;
 let loading = false, loggedIn = false, generation = 0;
 const labels = {valid:"有效", expired:"已过期", revoked:"已撤销", active:"可用"};
 function loginScreen() {
@@ -20,17 +20,15 @@ function date(value) {
   return new Date(value).toLocaleString("zh-CN", {timeZone:"Asia/Shanghai", hour12:false});
 }
 function render() {
-  const data = snapshot[selected], size = snapshot.page_size;
-  $("users-tab").classList.toggle("selected", selected === "users");
-  $("sessions-tab").classList.toggle("selected", selected === "sessions");
-  const headings = selected === "users" ? ["ID", "用户名", "账号状态", "已查看欢迎页", "注册时间（北京时间）"] : ["ID", "用户名", "会话状态", "创建时间", "到期时间", "撤销时间"];
+  const data = snapshot.users, size = snapshot.page_size;
+  const headings = ["ID", "账号", "状态", "注册时间（北京时间）"];
   const head = document.createElement("tr");
   headings.forEach(title => {const th = document.createElement("th"); th.textContent=title; head.append(th);});
   $("table-head").replaceChildren(head);
   const body = document.createDocumentFragment();
   data.items.forEach(item => {
     const tr = document.createElement("tr");
-    const values = selected === "users" ? [item.id,item.username,item.status,item.seen_welcome ? "是" : "否",date(item.created_at)] : [item.id,item.username,item.state,date(item.created_at),date(item.expires_at),date(item.revoked_at)];
+    const values = [item.id,item.username,item.status,date(item.created_at)];
     values.forEach((value,i) => {
       const td = document.createElement("td");
       if (i === 2) {
@@ -51,7 +49,7 @@ async function refresh() {
   loading=true; $("refresh").disabled=true;
   const currentGeneration=generation;
   try {
-    const params=new URLSearchParams({q:query,user_page:userPage,session_page:sessionPage});
+    const params=new URLSearchParams({q:query,user_page:userPage,session_page:1});
     const response=await fetch("/api/dashboard?"+params, {cache:"no-store", signal:AbortSignal.timeout(12000)});
     if(currentGeneration!==generation)return;
     if (response.status===401) {loginScreen(); return;}
@@ -61,8 +59,8 @@ async function refresh() {
     snapshot=result; loggedIn=true;
     $("login").hidden=true; $("board").hidden=false; $("board-error").hidden=true;
     $("admin-name").textContent=snapshot.username;
-    [["total-users","total_users"],["active-users","active_users"],["today-users","today_users"],["valid-sessions","valid_sessions"]].forEach(([id,key]) => $(id).textContent=snapshot.stats[key]);
-    $("users-count").textContent=snapshot.users.total; $("sessions-count").textContent=snapshot.sessions.total;
+    [["total-users","total_users"],["active-users","active_users"],["today-users","today_users"]].forEach(([id,key]) => $(id).textContent=snapshot.stats[key]);
+    $("users-count").textContent=snapshot.users.total;
     $("updated").textContent="更新于 "+date(snapshot.updated_at);
     render();
   } catch (error) {
@@ -77,7 +75,7 @@ $("login-form").addEventListener("submit", async event => {
     const response=await fetch("/api/login", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:$("username").value,password:$("password").value}),signal:AbortSignal.timeout(12000)});
     const result=await response.json();
     if (!response.ok) throw new Error(result.detail || "登录失败");
-    $("password").value=""; userPage=1; sessionPage=1; query=""; $("search").value="";
+    $("password").value=""; userPage=1; query=""; $("search").value="";
     loggedIn=true; $("login").hidden=true; $("board").hidden=false; await refresh();
   } catch (error) {$("login-error").textContent=error.message;}
   finally {$("login-button").disabled=false;}
@@ -87,10 +85,9 @@ $("logout").addEventListener("click", async () => {
   catch {$("board-error").textContent="退出失败，请重试。"; $("board-error").hidden=false;}
 });
 $("refresh").addEventListener("click",refresh);
-$("search-form").addEventListener("submit",event => {event.preventDefault(); if(loading)return; query=$("search").value; userPage=sessionPage=1; refresh();});
-$("search").addEventListener("search",() => {if(!$("search").value&&!loading){query="";userPage=sessionPage=1;refresh();}});
-["users","sessions"].forEach(name => $(name+"-tab").addEventListener("click",()=>{selected=name;if(snapshot)render();}));
-function page(delta) {if(loading)return; if(selected==="users")userPage+=delta;else sessionPage+=delta;refresh();}
+$("search-form").addEventListener("submit",event => {event.preventDefault(); if(loading)return; query=$("search").value; userPage=1; refresh();});
+$("search").addEventListener("search",() => {if(!$("search").value&&!loading){query="";userPage=1;refresh();}});
+function page(delta) {if(loading)return; userPage+=delta;refresh();}
 $("previous").addEventListener("click",()=>page(-1)); $("next").addEventListener("click",()=>page(1));
 $("hash-form").addEventListener("submit",async event=>{
   event.preventDefault();

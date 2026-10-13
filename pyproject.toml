@@ -1,6 +1,6 @@
 [project]
 name = "documate"
-version = "0.4.1"
+version = "0.5.1"
 requires-python = ">=3.14"
 dependencies = [
     "fastapi>=0.141.1",

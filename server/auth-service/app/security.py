@@ -39,12 +39,13 @@ class TokenSigner:
         self.public_key = Path(public_key_path).read_text(encoding="utf-8")
         self.issuer = issuer
 
-    def access_token(self, user_id: int, username: str, minutes: int) -> str:
+    def access_token(self, user_id: int, username: str, minutes: int, auth_version: int = 0) -> str:
         now = datetime.now(timezone.utc)
         return jwt.encode(
             {
                 "sub": str(user_id),
                 "username": username,
+                "ver": auth_version,
                 "iss": self.issuer,
                 "iat": now,
                 "exp": now + timedelta(minutes=minutes),

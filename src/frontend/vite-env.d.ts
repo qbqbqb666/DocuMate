@@ -1,6 +1,10 @@
 /// <reference types="vite/client" />
 import type { UpdateState } from './components/UpdateGate'
 
+declare global {
+  const __APP_VERSION__: string
+}
+
 interface ImportMetaEnv {
   readonly VITE_AUTH_SERVICE_URL?: string
   readonly VITE_BACKEND_URL?: string

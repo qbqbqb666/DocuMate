@@ -22,7 +22,7 @@ export function AuthHero({ mood }: { mood: RobotMood }) {
       <Robot name="robot-two" images={[r2Idle, r2Peek, r2Smile]} onHover={setHoveringRobot} />
       <Robot name="robot-three" images={[r3Idle, r3Peek, r3Smile]} onHover={setHoveringRobot} />
     </div>
-    <div className="auth-mini-stats"><span><i />测试阶段</span><b>·</b><code>12k+ 文档</code><b>·</b><code>1.8M chunks</code><b>·</b><code>0 数据上云</code></div>
+    <div className="auth-mini-stats"><span><i />测试阶段</span></div>
   </aside>
 }
 

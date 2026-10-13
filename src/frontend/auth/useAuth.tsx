@@ -21,7 +21,7 @@
 import {
   createContext, useContext, useEffect, useState, ReactNode, useCallback,
 } from 'react'
-import { AuthAPI, AuthError, type UserInfo } from './AuthClient'
+import { AuthAPI, AuthError, type UserInfo, type EmailCredentials, type EmailPasswordCredentials } from './AuthClient'
 
 // 本地 Python backend 地址 (Electron 拉起的 FastAPI)
 // 不通过 import.meta.env 配, 因为 backend 端口在 Electron 启动时定死 8765
@@ -58,8 +58,8 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   localMode: boolean
-  login: (username: string, password: string, remember: boolean) => Promise<void>
-  register: (username: string, password: string) => Promise<void>
+  login: (payload: EmailPasswordCredentials, remember: boolean) => Promise<void>
+  register: (payload: EmailCredentials) => Promise<void>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
 }
@@ -136,8 +136,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [state.accessToken, state.status, state.user?.username])
 
   // 登录
-  const login = useCallback(async (username: string, password: string, remember: boolean) => {
-    const auth = await AuthAPI.login(username, password)
+  const login = useCallback(async (payload: EmailPasswordCredentials, remember: boolean) => {
+    const auth = await AuthAPI.login(payload)
     await saveRefresh(auth.refresh_token, remember)
     setState({
       user: auth.user,
@@ -147,8 +147,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // 注册 (注册成功直接登录)
-  const register = useCallback(async (username: string, password: string) => {
-    const auth = await AuthAPI.register(username, password)
+  const register = useCallback(async (payload: EmailCredentials) => {
+    const auth = await AuthAPI.register(payload)
     await saveRefresh(auth.refresh_token, true)
     setState({
       user: auth.user,
