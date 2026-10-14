@@ -2,7 +2,7 @@ from langchain.tools import ToolRuntime
 from langchain_core.tools import tool
 
 from src.backend.agent.context import AgentContext
-from src.backend.agent.path_policy import resolve_runtime_path
+from src.backend.agent.path_policy import accessible_roots, is_accessible_path, resolve_runtime_path
 from src.backend.agent.document import (
     DOCUMENT_MUTATING_TOOLS,
     DOCUMENT_READ_ONLY_TOOLS,
@@ -192,12 +192,38 @@ def delete_file(
     return trash_workspace_path(_resolve_context_path(runtime, relative_path))
 
 
+@tool
+def search_workspace_documents(
+    runtime: ToolRuntime[AgentContext, AgentState],
+    query: str,
+    relative_path: str | None = None,
+    top_k: int = 5,
+) -> dict:
+    """仅当用户要求按内容查找工作区相关文件时，使用本地向量检索返回原文件路径、片段和来源位置。
+
+    未指定 relative_path 时搜索项目可访问文件夹；指定时只搜索该子目录。
+    不用于读取用户直接指定的文件，不改写或翻译需求；候选需读取原文核对。
+    """
+    from src.backend.services.retrieval import get_retrieval_service
+
+    allowed = accessible_roots(runtime.context)
+    roots = list(allowed)
+    if relative_path is not None:
+        target = resolve_runtime_path(runtime, relative_path)
+        if not is_accessible_path(target, allowed):
+            raise ValueError("资料检索仅支持当前工作区或项目可访问文件夹")
+        roots = [target]
+    service = runtime.context.retrieval_service or get_retrieval_service()
+    return service.search(query, roots, top_k, runtime.context.cancellation.raise_if_cancelled)
+
+
 READ_ONLY_TOOLS = [
     list_workspace_files,
     search_workspace_files,
     get_workspace_file_info,
     read_text_file,
     search_text_in_files,
+    search_workspace_documents,
 ]
 
 MUTATING_TOOLS = [

@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from src.backend.api.api_keys import router as api_keys_router
 from src.backend.api.chat import router as chat_router
 from src.backend.api.documents import router as documents_router
+from src.backend.api.workspace_files import router as workspace_files_router
 from src.backend.api.schemas import ErrorDetail, ErrorResponse, InternalTokenRequest
 from src.backend.api.settings import router as settings_router
 from src.backend.api.projects import router as projects_router
@@ -78,7 +79,7 @@ def create_app(
 
     app = FastAPI(
         title="DocuMate API",
-        version="0.1.0",
+        version="0.6.0",
         lifespan=lifespan,
     )
     app.add_middleware(
@@ -96,6 +97,7 @@ def create_app(
     app.include_router(projects_router, prefix="/api")
     app.include_router(stats_router, prefix="/api")
     app.include_router(documents_router, prefix="/api")
+    app.include_router(workspace_files_router, prefix="/api")
 
     @app.post("/__internal/set-token", tags=["internal"])
     def set_remote_token(payload: InternalTokenRequest) -> dict[str, str]:

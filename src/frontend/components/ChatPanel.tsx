@@ -3,6 +3,8 @@ import { useChat, type ChatMessage, type ToolCallView } from '../hooks/useChat'
 import { useSessions } from '../hooks/useSessions'
 import { apiUrl } from '../api/client'
 import type { ApprovalPayload } from '../api/types'
+import type { WorkspaceFile } from '../hooks/useWorkspaceFiles'
+import { FileReferencePicker } from './FileReferencePicker'
 
 interface Props {
   onJumpToDoc?: (docId: string) => void
@@ -36,9 +38,12 @@ export function ChatPanel({ onJumpToDoc, workspacePath, projectId, newSessionReq
   } = useChat(workspacePath, projectId, trustAgent ? 'full_access' : 'request_approval', provider, modelName)
   const sessions = useSessions(workspacePath, projectId)
   const [input, setInput] = useState('')
+  const [showFilePicker, setShowFilePicker] = useState(false)
+  const [referencedFiles, setReferencedFiles] = useState<WorkspaceFile[]>([])
   const [showSessionMenu, setShowSessionMenu] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const lastNewSessionRequest = useRef(0)
+  const submitBusyRef = useRef(false)
   const isComposingRef = useRef(false)
 
   useEffect(() => {
@@ -50,6 +55,11 @@ export function ChatPanel({ onJumpToDoc, workspacePath, projectId, newSessionReq
     lastNewSessionRequest.current = newSessionRequest
     void startNewThread()
   }, [newSessionRequest, startNewThread])
+
+  useEffect(() => {
+    setReferencedFiles([])
+    setShowFilePicker(false)
+  }, [workspacePath, projectId, requestedThreadId, newSessionRequest])
 
   // 自动滚到底
   useEffect(() => {
@@ -75,11 +85,19 @@ export function ChatPanel({ onJumpToDoc, workspacePath, projectId, newSessionReq
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading])
 
-  const submit = () => {
-    if (!input.trim() || loading) return
-    const text = input.trim()
-    setInput('')
-    send(text)
+  const submit = async () => {
+    if (!input.trim() || loading || submitBusyRef.current) return
+    submitBusyRef.current = true
+    const references = referencedFiles.length ? '\n\n本轮引用的本地原文件（JSON 路径列表）：\n' + JSON.stringify(referencedFiles.map(file => file.saved_path), null, 2) + '\n请直接读取这些指定文件，再按上述需求处理；这些路径已明确，无需用向量检索定位。若文件不存在或读取失败，请明确说明，不要猜测文件内容。' : ''
+    const text = input.trim() + references
+    const draft = input
+    const referencesToSend = referencedFiles
+    try {
+      if (await send(text)) {
+        setInput(current => current === draft ? '' : current)
+        setReferencedFiles(current => current.filter(file => !referencesToSend.some(sent => sent.id === file.id)))
+      }
+    } finally { submitBusyRef.current = false }
   }
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -95,11 +113,15 @@ export function ChatPanel({ onJumpToDoc, workspacePath, projectId, newSessionReq
   const handleSwitchSession = async (id: string) => {
     setShowSessionMenu(false)
     if (id === threadId) return
+    setReferencedFiles([])
+    setShowFilePicker(false)
     await loadThread(id)
   }
 
   const handleNewSession = async () => {
     setShowSessionMenu(false)
+    setReferencedFiles([])
+    setShowFilePicker(false)
     await startNewThread()
   }
 
@@ -229,8 +251,12 @@ export function ChatPanel({ onJumpToDoc, workspacePath, projectId, newSessionReq
       <div className="dm-chat-composer">
         <div className="dm-chat-controls">
           <label><span>模型</span><select value={`${provider}|${modelName}`} disabled={settingsLoading} onChange={(event) => { const [nextProvider, nextModel] = event.target.value.split('|') as ['siliconflow' | 'deepseek', string]; onSettingsChange?.({ provider: nextProvider, model_name: nextModel }) }}>{models.map((model) => <option key={`${model.provider}|${model.model_name}`} value={`${model.provider}|${model.model_name}`}>{model.provider === 'deepseek' ? 'DeepSeek' : 'SiliconFlow'} · {model.display_name}</option>)}</select></label>
+          <button type="button" className="dm-file-reference-button" disabled={loading || !workspacePath} onClick={() => setShowFilePicker(true)} title="选择文件区文件">＋ 引用文件</button>
           <label className="dm-chat-access-control"><span>权限模式</span><select value={trustAgent ? 'full_access' : 'request_approval'} disabled={settingsLoading} onChange={(event) => onSettingsChange?.({ trust_agent: event.target.value === 'full_access' })}><option value="request_approval">请求批准</option><option value="full_access">完全访问</option></select></label>
         </div>
+        {referencedFiles.length > 0 && <div className="max-w-3xl mx-auto mb-2 flex flex-wrap items-center gap-2">
+          {referencedFiles.map(file => <button type="button" key={file.id} disabled={loading} title={file.saved_path} aria-label={`移除引用 ${file.filename}`} className="text-xs bg-blue-50 text-blue-800 rounded px-2 py-1" onClick={() => setReferencedFiles(current => current.filter(item => item.id !== file.id))}>{file.filename} ×</button>)}
+        </div>}
         <div className="flex gap-2 max-w-3xl mx-auto">
           <textarea
             value={input}
@@ -260,6 +286,8 @@ export function ChatPanel({ onJumpToDoc, workspacePath, projectId, newSessionReq
           )}
         </div>
       </div>
+
+      {showFilePicker && <FileReferencePicker workspacePath={workspacePath} selected={referencedFiles} onClose={() => setShowFilePicker(false)} onConfirm={files => { setReferencedFiles(files); setShowFilePicker(false) }} />}
 
       {/* Permission 确认对话框 */}
       {pendingTool && (

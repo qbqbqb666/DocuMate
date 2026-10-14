@@ -1,46 +1,78 @@
-import type { DocumentMeta } from '../hooks/useDocuments'
+import { useEffect, useState } from 'react'
+import { apiRequest } from '../api/client'
+import type { WorkspaceFile } from '../hooks/useWorkspaceFiles'
 import { Icon } from './Icon'
 
 interface Props {
-  documents: DocumentMeta[]
+  roots: WorkspaceFile[]
+  count: number
   selectedId: string | null
   onSelect: (id: string) => void
   loading: boolean
-  recentOnly: boolean
-  onShowAll: () => void
-  onToggleRecent: () => void
 }
 
-function formatTime(iso: string): string {
-  const date = new Date(iso)
-  const minutes = Math.floor((Date.now() - date.getTime()) / 60000)
-  if (minutes < 1) return '刚刚导入'
-  if (minutes < 60) return `${minutes} 分钟前`
-  if (minutes < 1440) return `${Math.floor(minutes / 60)} 小时前`
-  return date.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
+function Folder({ folder, depth, selectedId, onSelect }: { folder: WorkspaceFile; depth: number; selectedId: string | null; onSelect: (id: string) => void }) {
+  const [expanded, setExpanded] = useState(depth === 0)
+  const [entries, setEntries] = useState<WorkspaceFile[]>([])
+  const [limit, setLimit] = useState(100)
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!expanded) return
+    let cancelled = false
+    let busy = false
+    const load = async () => {
+      if (busy) return
+      busy = true
+      try {
+        const result = await apiRequest<{ entries: WorkspaceFile[]; total: number }>(`/api/workspace-files/children?path=${encodeURIComponent(folder.id)}&limit=${Math.min(200, limit)}&offset=0`)
+        let items = result.entries
+        for (let offset = 200; offset < Math.min(limit, result.total); offset += 200) {
+          if (cancelled) return
+          const page = await apiRequest<{ entries: WorkspaceFile[] }>(`/api/workspace-files/children?path=${encodeURIComponent(folder.id)}&limit=${Math.min(200, limit - offset)}&offset=${offset}`)
+          items = [...items, ...page.entries]
+        }
+        if (!cancelled) { setEntries(items.slice(0, limit)); setTotal(result.total); setError(null) }
+      } catch (reason) {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason))
+      } finally {
+        busy = false
+        if (!cancelled) setLoading(false)
+      }
+    }
+    setLoading(true)
+    void load()
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void load() }, 5000)
+    return () => { cancelled = true; window.clearInterval(timer) }
+  }, [expanded, folder.id, limit])
+
+  return <div>
+    <button className="dm-folder-row" style={{ paddingLeft: 12 + depth * 14, width: 'calc(100% - 24px)', border: 0, textAlign: 'left' }} onClick={() => setExpanded(!expanded)} aria-expanded={expanded} title={folder.saved_path}>
+      <span>{expanded ? '⌄' : '›'}</span><Icon name="folder" size={16} /><span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.filename}</span>
+    </button>
+    {expanded && <div>
+      {error && <div className="dm-inline-error">{error}</div>}
+      {loading && entries.length === 0 && <div className="dm-doc-empty">正在读取…</div>}
+      {!loading && !error && total === 0 && <div className="dm-doc-empty">文件夹为空</div>}
+      {entries.map(item => item.kind === 'directory'
+        ? <Folder key={item.id} folder={item} depth={depth + 1} selectedId={selectedId} onSelect={onSelect} />
+        : <button key={item.id} className={`dm-document-row ${selectedId === item.id ? 'is-selected' : ''}`} style={{ paddingLeft: 26 + depth * 14 }} onClick={() => onSelect(item.id)} title={item.saved_path}>
+          <span className="file-type"><Icon name="file" size={18} /></span><span className="min-w-0 flex-1"><span className="filename">{item.filename}</span><span className="metadata">{(item.size_bytes / 1024).toFixed(1)} KB · {item.previewable ? '原文件' : '暂不支持预览'}</span></span>
+        </button>)}
+      {entries.length < total && <button className="dm-quiet-button" onClick={() => setLimit(value => value + 100)}>加载更多（已显示 {entries.length} / {total}）</button>}
+    </div>}
+  </div>
 }
 
-export function DocumentSidebar({ documents, selectedId, onSelect, loading, recentOnly, onShowAll, onToggleRecent }: Props) {
-  const visibleDocuments = recentOnly
-    ? [...documents].sort((a, b) => +new Date(b.uploaded_at) - +new Date(a.uploaded_at)).slice(0, 5)
-    : documents
-
-  return (
-    <div className="dm-doc-sidebar">
-      <div className="dm-doc-heading"><span>文件</span></div>
-      <button className={`dm-folder-row ${!recentOnly ? 'is-active' : ''}`} onClick={onShowAll}><Icon name="folder" size={19} /><span>全部文件</span><span className="count">{loading ? '…' : documents.length}</span></button>
-      <div className="dm-document-list">
-        {loading && <div className="dm-doc-empty">正在读取文件区…</div>}
-        {!loading && visibleDocuments.length === 0 && <div className="dm-doc-empty">{recentOnly ? '还没有最近导入的资料' : <>文件夹还是空的<br />拖入一份资料开始吧</>}</div>}
-        {visibleDocuments.length > 0 && <div className="dm-tree-folder-title"><span>›</span><Icon name="folder" size={16} />{recentOnly ? '最近导入' : '学习资料'}<span className="dm-tree-count">{visibleDocuments.length}</span></div>}
-        <div className="dm-tree-files">{visibleDocuments.map((doc) => (
-          <button key={doc.id} onClick={() => onSelect(doc.id)} className={`dm-document-row ${selectedId === doc.id ? 'is-selected' : ''}`}>
-            <span className="file-type"><Icon name="file" size={20} /></span>
-            <span className="min-w-0 flex-1"><span className="filename">{doc.filename}</span><span className="metadata">{doc.char_count.toLocaleString()} 字 · {formatTime(doc.uploaded_at)}</span></span>
-          </button>
-        ))}</div>
-        {documents.length > 0 && <button className={`dm-recent-row ${recentOnly ? 'is-active' : ''}`} onClick={onToggleRecent}><Icon name="clock" size={16} />{recentOnly ? '查看全部文件' : '最近导入'}</button>}
-      </div>
+export function DocumentSidebar({ roots, count, selectedId, onSelect, loading }: Props) {
+  return <div className="dm-doc-sidebar">
+    <div className="dm-doc-heading"><span>原文件目录</span></div>
+    <div className="dm-folder-row is-active"><Icon name="folder" size={19} /><span>可解析资料</span><span className="count">{loading ? '…' : count}</span></div>
+    <div className="dm-document-list">
+      {loading && <div className="dm-doc-empty">正在读取文件区…</div>}
+      {roots.map(root => <Folder key={root.id} folder={root} depth={0} selectedId={selectedId} onSelect={onSelect} />)}
     </div>
-  )
+  </div>
 }

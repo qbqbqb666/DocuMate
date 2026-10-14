@@ -7,6 +7,7 @@ from src.backend.agent.nodes import (
     finalize_node,
     model_node,
     prepare_node,
+    retrieval_node,
     route_after_approval,
     route_after_model,
     summarize_node,
@@ -24,6 +25,7 @@ builder.add_node("model", model_node)
 builder.add_node("approval", approval_node)
 builder.add_node("tools", tool_node)
 builder.add_node("document", document_node)
+builder.add_node("retrieval", retrieval_node)
 builder.add_node("finalize", finalize_node)
 
 builder.add_edge(START, "prepare")
@@ -43,10 +45,12 @@ builder.add_conditional_edges(
     {
         "tools": "tools",
         "document": "document",
+        "retrieval": "retrieval",
     },
 )
 builder.add_edge("tools", "summarize")
 builder.add_edge("document", "summarize")
+builder.add_edge("retrieval", "summarize")
 builder.add_edge("finalize", END)
 
 graph = builder.compile(checkpointer=checkpointer)

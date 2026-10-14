@@ -93,6 +93,7 @@ class AgentContext:
     provider: ModelProvider = ModelProvider.SILICONFLOW
     model_name: str = "Qwen/Qwen3.5-4B"
     recorder: RunRecorder | None = None
+    retrieval_service: Any | None = None
     cancellation: CancellationToken = field(default_factory=CancellationToken)
 
 

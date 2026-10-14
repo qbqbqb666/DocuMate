@@ -1,4 +1,5 @@
 import threading
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Iterator
@@ -6,6 +7,19 @@ from typing import Iterator
 
 class RunCancelledError(RuntimeError):
     """当前 Agent 运行已由用户或应用生命周期取消。"""
+
+
+@contextmanager
+def cancellable_lock(lock, cancel_check: Callable[[], None]) -> Iterator[None]:
+    """等待索引或模型锁时也响应取消，不必等后台任务处理完。"""
+    cancel_check()
+    while not lock.acquire(timeout=0.1):
+        cancel_check()
+    try:
+        cancel_check()
+        yield
+    finally:
+        lock.release()
 
 
 @dataclass

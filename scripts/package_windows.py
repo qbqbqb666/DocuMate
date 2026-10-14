@@ -223,6 +223,8 @@ def check_backend(executable):
                "DOCUMATE_APP_ENV": str(Path(directory) / ".env"),
                "PYTHON_DOTENV_DISABLED": "1"}
         env.pop("DOCUMATE_PARENT_PID", None)
+        env.pop("DOCUMATE_EMBEDDING_DIR", None)
+        run([executable, "--check-local-retrieval"], cwd=directory, env=env)
         log_path = Path(directory) / "backend.log"
         with log_path.open("wb") as log:
             process = subprocess.Popen([str(executable)], cwd=directory, env=env,
@@ -293,12 +295,11 @@ def main():
     run([python, "-c", SMOKE_TEST])
     run([node, npm, "run", "build"])
     dist = work / "dist"
-    # Keep the shared spec unchanged; collect the extension DLL in Windows packages.
+    # 使用共用的模型与原生依赖收集规则。
     spec = (ROOT / "documate-backend.spec").read_text(encoding="utf-8")
     if "ROOT = Path(SPECPATH)" not in spec or '    "docx",' not in spec:
         raise RuntimeError("PyInstaller spec 已变化，请更新 Windows 构建脚本")
     spec = spec.replace("ROOT = Path(SPECPATH)", f"ROOT = Path({str(ROOT)!r})")
-    spec = spec.replace('    "docx",', '    "sqlite_vec",\n    "docx",')
     spec_path = work / "documate-backend.spec"
     spec_path.write_text(spec, encoding="utf-8")
     run([python, "-m", "PyInstaller", "--clean", "--noconfirm", "--distpath", dist,

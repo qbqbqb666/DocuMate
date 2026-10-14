@@ -390,7 +390,7 @@ def _approval_decision(
     raise ValueError("审批决定必须是 allow 或 deny")
 
 
-def route_after_approval(state: AgentState) -> Literal["tools", "document"]:
+def route_after_approval(state: AgentState) -> Literal["tools", "document", "retrieval"]:
     """根据已审批批次中的工具类型选择执行节点。"""
     plan = state.get("tool_execution_plan")
     if not plan:
@@ -406,9 +406,21 @@ def route_after_approval(state: AgentState) -> Literal["tools", "document"]:
     )
     if latest is None:
         raise ValueError("找不到执行计划对应的 AIMessage")
+    if any(call["name"] == "search_workspace_documents" for call in latest.tool_calls):
+        return "retrieval"
     if any(call["name"] in DOCUMENT_TOOL_NAMES for call in latest.tool_calls):
         return "document"
     return "tools"
+
+
+def retrieval_node(
+    state: AgentState,
+    config: RunnableConfig,
+    runtime: Runtime[AgentContext],
+) -> dict:
+    """只处理包含资料检索请求的工具批次，沿用审批、记录和取消链路。"""
+    write_status(runtime, stage="tool", message="正在同步索引并检索工作区资料")
+    return tool_node(state, config, runtime)
 
 
 def document_node(

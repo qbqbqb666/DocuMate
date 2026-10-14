@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useDocuments, type DocumentDetail } from './hooks/useDocuments'
+import { useWorkspaceFiles, type FilePreview } from './hooks/useWorkspaceFiles'
 import { useWorkspace } from './hooks/useWorkspace'
 import { useSettings } from './hooks/useSettings'
 import { useProjects } from './hooks/useProjects'
 import { useStats } from './hooks/useStats'
-import { UploadZone } from './components/UploadZone'
 import { DocumentSidebar } from './components/DocumentSidebar'
 import { SearchPanel } from './components/SearchPanel'
 import { ChatPanel } from './components/ChatPanel'
@@ -22,19 +21,19 @@ type AppArea = 'files' | 'workspace'
 
 function App() {
   const workspace = useWorkspace()
-  const { documents, loading, uploading, error, upload, fetchDetail, refresh: refreshDocs } = useDocuments()
+  const { roots, count, loading, error, fetchDetail, refresh: refreshDocs } = useWorkspaceFiles(workspace.info?.path)
   const settings = useSettings()
   const projects = useProjects()
   const stats = useStats(workspace.info?.path)
   const { user, accessToken, logout, localMode } = useAuth()
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [detail, setDetail] = useState<DocumentDetail | null>(null)
+  const [detail, setDetail] = useState<FilePreview | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState<string | null>(null)
   const [area, setArea] = useState<AppArea>('files')
   const [toast, setToast] = useState<string | null>(null)
   const [showProfile, setShowProfile] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
-  const [recentOnly, setRecentOnly] = useState(false)
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false)
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [apiProvider, setApiProvider] = useState<'siliconflow' | 'deepseek'>('siliconflow')
@@ -61,7 +60,7 @@ function App() {
     if (!window.documate?.onWorkspaceChanged) return
     return window.documate.onWorkspaceChanged(() => refreshDocs())
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [refreshDocs])
 
   useEffect(() => {
     if (activeProjectId || !projects.projects.length) return
@@ -70,26 +69,34 @@ function App() {
   }, [activeProjectId, projects.projects])
 
   useEffect(() => {
-    if (!selectedId) { setDetail(null); return }
+    setDetail(null)
+    setDetailError(null)
+    if (!selectedId) { setDetailLoading(false); return }
     let cancelled = false
+    let busy = false
+    let version: string | undefined
+    const load = async () => {
+      if (busy) return
+      busy = true
+      try {
+        const doc = await fetchDetail(selectedId, version)
+        if (!cancelled && doc) { version = doc.version; setDetail(doc); setDetailError(null) }
+      } catch (reason) {
+        if (!cancelled) { version = undefined; setDetail(null); setDetailError(reason instanceof Error ? reason.message : String(reason)) }
+      } finally {
+        busy = false
+        if (!cancelled) setDetailLoading(false)
+      }
+    }
     setDetailLoading(true)
-    fetchDetail(selectedId).then((doc) => {
-      if (!cancelled) { setDetail(doc); setDetailLoading(false) }
-    })
-    return () => { cancelled = true }
+    void load()
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void load() }, 5000)
+    return () => { cancelled = true; window.clearInterval(timer) }
   }, [selectedId, fetchDetail])
 
   const notify = (text: string) => {
     setToast(text)
     window.setTimeout(() => setToast(null), 3600)
-  }
-
-  const handleUpload = async (file: File) => {
-    const meta = await upload(file)
-    if (!meta) return
-    setSelectedId(meta.id)
-    void stats.refresh()
-    notify(`${meta.filename} 已加入文件区${meta.used_ocr ? '，已完成 OCR 识别' : ''}`)
   }
 
   const handleJumpToDoc = (docId: string) => {
@@ -204,14 +211,14 @@ function App() {
 
           <div className="dm-sidebar-content">
             {area === 'files' ? (
-              <DocumentSidebar documents={documents} selectedId={selectedId} onSelect={setSelectedId} loading={loading} recentOnly={recentOnly} onShowAll={() => setRecentOnly(false)} onToggleRecent={() => setRecentOnly((value) => !value)} />
+              <DocumentSidebar roots={roots} count={count} selectedId={selectedId} onSelect={setSelectedId} loading={loading} />
             ) : (
               <ProjectSidebar projects={projects.projects} activeThreadId={requestedThreadId} resetKey={showNewConversation ? 'new-conversation' : requestedThreadId || 'none'} onOpenThread={(project, threadId, title) => void openThread(project, threadId, title)} onNewThread={(project) => void createThreadForProject(project)} onDeleteThread={(threadId) => { if (threadId === requestedThreadId) { setRequestedThreadId(null); setAgentName('DocuMate Agent') } }} />
             )}
           </div>
 
           <div className="dm-sidebar-footer">
-            {area === 'files' && <UploadZone onUpload={handleUpload} uploading={uploading} compact />}
+            {area === 'files' && <button className="dm-quiet-button" onClick={() => void refreshDocs()}>刷新目录</button>}
             {error && <div className="dm-inline-error">{error}</div>}
             <button className="dm-quiet-button" onClick={() => window.documate?.openFolder ? workspace.openInFinder() : notify('浏览器预览模式不支持打开访达；Electron 版可直接打开工作区。')}><Icon name="external" size={15} />在访达中打开</button>
           </div>
@@ -219,9 +226,9 @@ function App() {
 
         <main className="dm-main">
           {showNewConversation ? <NewConversationPage onCancel={() => setShowNewConversation(false)} onCreateProject={async (name, folders) => { const project = await projects.create(name, folders); await createThreadForProject(project) }} /> : area === 'files' ? (
-            selectedId && detailLoading ? <LoadingWorkspace /> : selectedId && detail ? <DocumentViewer doc={detail} onChat={() => openAgent(`${detail.filename} Agent`, true)} onMore={() => notify('文件操作：可从左侧选择资料，或交给 Agent 继续处理。')} /> : <FileEmptyState count={documents.length} onUpload={handleUpload} uploading={uploading} />
+            selectedId && detailLoading ? <LoadingWorkspace /> : selectedId && detail ? <DocumentViewer doc={detail} onChat={() => openAgent(`${detail.filename} Agent`, true)} onMore={() => notify(detail.saved_path)} /> : <FileEmptyState count={count} error={detailError} />
           ) : (
-            <WorkspaceView documentsCount={documents.length} workspacePath={activeProject?.primary_path || workspace.info.path} projectId={activeProject?.id} agentName={agentName} newSessionRequest={newSessionRequest} requestedThreadId={requestedThreadId} trustAgent={settings.settings.trust_agent} provider={settings.settings.provider} modelName={settings.settings.model_name} models={settings.models} settingsLoading={settings.loading} onSettingsChange={(patch) => void settings.update(patch)} onJumpToDoc={handleJumpToDoc} />
+            <WorkspaceView documentsCount={count} workspacePath={activeProject?.primary_path || workspace.info.path} projectId={activeProject?.id} agentName={agentName} newSessionRequest={newSessionRequest} requestedThreadId={requestedThreadId} trustAgent={settings.settings.trust_agent} provider={settings.settings.provider} modelName={settings.settings.model_name} models={settings.models} settingsLoading={settings.loading} onSettingsChange={(patch) => void settings.update(patch)} onJumpToDoc={handleJumpToDoc} />
           )}
         </main>
       </div>
@@ -236,17 +243,17 @@ function App() {
   )
 }
 
-function FileEmptyState({ count, onUpload, uploading }: { count: number; onUpload: (file: File) => Promise<void>; uploading: boolean }) {
-  return <section className="dm-empty-state"><div className="dm-empty-mark"><Icon name="folder" size={35} /></div><h1>{count ? '选择一份资料继续阅读' : '把文件放进你的工作区'}</h1><p>{count ? `文件区已有 ${count} 份资料。选择左侧文件，或继续导入新内容。` : '导入本地资料后，再到工作区用自然语言安排阅读、搜索、整理或生成任务。'}</p><div className="dm-empty-upload dm-folder-surface"><UploadZone onUpload={onUpload} uploading={uploading} /></div><div className="dm-empty-note">文件默认留在本地工作区，按需调用 AI 服务</div></section>
+function FileEmptyState({ count, error }: { count: number; error: string | null }) {
+  return <section className="dm-empty-state"><div className="dm-empty-mark"><Icon name="folder" size={35} /></div><h1>{error ? '无法预览此文件' : count ? '选择一份资料继续阅读' : '浏览你的工作区文件'}</h1><p>{error || (count ? `当前项目有 ${count.toLocaleString()} 份可解析资料，展开左侧目录选择原文件。` : '将资料保存到当前项目文件夹，文件区会自动更新。')}</p><div className="dm-empty-note">直接使用本地原文件 · 支持 PDF / DOCX / XLSX / TXT / Markdown</div></section>
 }
 
 function WorkspaceView({ documentsCount, workspacePath, projectId, agentName, newSessionRequest, requestedThreadId, trustAgent, provider, modelName, models, settingsLoading, onSettingsChange, onJumpToDoc }: { documentsCount: number; workspacePath: string; projectId?: string; agentName: string; newSessionRequest: number; requestedThreadId: string | null; trustAgent: boolean; provider: 'siliconflow' | 'deepseek'; modelName: string; models: Array<{ provider: 'siliconflow' | 'deepseek'; model_name: string; display_name: string }>; settingsLoading: boolean; onSettingsChange: (patch: { trust_agent?: boolean; provider?: 'siliconflow' | 'deepseek'; model_name?: string }) => void; onJumpToDoc: (id: string) => void }) {
   return <section className="dm-workspace-view"><header className="dm-workspace-header"><div className="dm-session-title"><span>{agentName}</span><span className="dm-session-chevron">⌄</span></div><div className="dm-session-context"><Icon name="file" size={14} />对话 · 关联当前项目</div><div className="dm-workspace-meta"><span><Icon name="folder" size={15} />{documentsCount} 份资料</span><span><i className="dm-status online" />已就绪</span></div></header><div className="dm-chat-surface"><ChatPanel workspacePath={workspacePath} projectId={projectId} onJumpToDoc={onJumpToDoc} newSessionRequest={newSessionRequest} requestedThreadId={requestedThreadId} trustAgent={trustAgent} provider={provider} modelName={modelName} models={models} settingsLoading={settingsLoading} onSettingsChange={onSettingsChange} /></div></section>
 }
 
-function DocumentViewer({ doc, onChat, onMore }: { doc: DocumentDetail; onChat: () => void; onMore: () => void }) {
+function DocumentViewer({ doc, onChat, onMore }: { doc: FilePreview; onChat: () => void; onMore: () => void }) {
   const date = new Date(doc.uploaded_at).toLocaleDateString('zh-CN')
-  return <section className="dm-document-viewer"><header className="dm-document-header"><div className="dm-document-title"><div className="dm-file-icon"><Icon name="file" size={26} /></div><div><p className="dm-eyebrow">文件区 / 已入库</p><h1>{doc.filename}</h1><p>{doc.char_count.toLocaleString()} 字 · {(doc.size_bytes / 1024).toFixed(1)} KB · {date}</p></div></div><div className="dm-document-actions"><button onClick={onChat}><Icon name="message" size={16} />交给 Agent</button><button onClick={onMore} title="更多操作"><Icon name="more" /></button></div></header><div className="dm-document-body">{doc.text ? <pre>{doc.text}</pre> : <div className="dm-no-text"><Icon name="file" size={28} /><h2>暂时没有可预览的文本</h2><p>该文件可能是扫描件，后续可在工作区让 Agent 协助识别与整理。</p><button onClick={onChat}>进入工作区</button></div>}</div></section>
+  return <section className="dm-document-viewer"><header className="dm-document-header"><div className="dm-document-title"><div className="dm-file-icon"><Icon name="file" size={26} /></div><div><p className="dm-eyebrow">文件区 / 原文件</p><h1>{doc.filename}</h1><p>{doc.char_count.toLocaleString()} 字 · {(doc.size_bytes / 1024).toFixed(1)} KB · {date}</p></div></div><div className="dm-document-actions"><button onClick={onChat}><Icon name="message" size={16} />进入工作区</button><button onClick={onMore} title="更多操作"><Icon name="more" /></button></div></header><div className="dm-document-body"><p className="dm-empty-note">{doc.saved_path}{doc.truncated ? ' · 预览仅显示前 20 万字，索引不受此限制' : ''}</p>{doc.text ? <pre>{doc.text}</pre> : <div className="dm-no-text"><Icon name="file" size={28} /><h2>暂时没有可预览的文本</h2><p>该文件可能是扫描件，后续可在工作区让 Agent 协助识别与整理。</p><button onClick={onChat}>进入工作区</button></div>}</div></section>
 }
 
 function ProfileDrawer({ name, account, localMode, apiKeys, stats, onClose, onLogout, onNotice, onConfigureApiKey, onDeleteApiKey }: { name: string; account: string; localMode: boolean; apiKeys: ApiKeyStatus[]; stats: { document_count: number; thread_count: number; total_tokens: number }; onClose: () => void; onLogout: () => Promise<void>; onNotice: (message: string) => void; onConfigureApiKey: (provider: 'siliconflow' | 'deepseek') => void; onDeleteApiKey: (provider: 'siliconflow' | 'deepseek') => Promise<void> }) {
@@ -261,7 +268,7 @@ function ApiKeyProviderRow({ label, status, onConfigure, onDelete }: { label: st
 
 function ApiKeyDialog({ value, provider, error, saving, onChange, onCancel, onSave }: { value: string; provider: 'siliconflow' | 'deepseek'; error: string | null; saving: boolean; onChange: (value: string) => void; onCancel: () => void; onSave: () => void }) {
   const label = provider === 'deepseek' ? 'DeepSeek' : 'SiliconFlow'
-  return <div className="dm-dialog-overlay"><button className="dm-dialog-scrim" aria-label="关闭 API Key 配置" onClick={onCancel} /><form className="dm-dialog" onSubmit={(event) => { event.preventDefault(); onSave() }}><h2>配置 {label}</h2><p>填写后会先验证，再保存到本机 DocuMate 配置。</p><label className="dm-api-key-input">{label} API Key<input autoFocus type="password" autoComplete="off" value={value} onChange={(event) => onChange(event.target.value)} placeholder="sk-..." /></label>{provider === 'deepseek' && <p className="dm-provider-note">用于 DeepSeek V4.1 Flash 和 DeepSeek V4 Pro。</p>}{provider === 'siliconflow' && <p className="dm-provider-note">用于 Qwen 3.5 4B，以及文档向量检索与图片识别。</p>}{error && <p className="dm-dialog-error">{error}</p>}<div><button type="button" className="dm-outline-button" onClick={onCancel} disabled={saving}>取消</button><button type="submit" className="dm-dialog-primary" disabled={!value.trim() || saving}>{saving ? '验证并保存中…' : '验证并保存'}</button></div></form></div>
+  return <div className="dm-dialog-overlay"><button className="dm-dialog-scrim" aria-label="关闭 API Key 配置" onClick={onCancel} /><form className="dm-dialog" onSubmit={(event) => { event.preventDefault(); onSave() }}><h2>配置 {label}</h2><p>填写后会先验证，再保存到本机 DocuMate 配置。</p><label className="dm-api-key-input">{label} API Key<input autoFocus type="password" autoComplete="off" value={value} onChange={(event) => onChange(event.target.value)} placeholder="sk-..." /></label>{provider === 'deepseek' && <p className="dm-provider-note">用于 DeepSeek V4.1 Flash 和 DeepSeek V4 Pro。</p>}{provider === 'siliconflow' && <p className="dm-provider-note">用于 Qwen 3.5 4B 和图片识别；资料向量检索使用本地模型。</p>}{error && <p className="dm-dialog-error">{error}</p>}<div><button type="button" className="dm-outline-button" onClick={onCancel} disabled={saving}>取消</button><button type="submit" className="dm-dialog-primary" disabled={!value.trim() || saving}>{saving ? '验证并保存中…' : '验证并保存'}</button></div></form></div>
 }
 
 function LoadingWorkspace() { return <div className="dm-loading"><BrandMark size={50} /><span>正在准备你的工作区…</span></div> }

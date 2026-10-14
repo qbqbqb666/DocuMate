@@ -20,15 +20,10 @@ if errorlevel 1 (
     goto :failed
 )
 
-echo Installing Node.js dependencies...
-call npm.cmd ci --include=dev
+echo Building in a Windows Desktop folder, then returning artifacts to this shared project...
+py -3.14 scripts\package_windows_shared.py "%~dp0."
 if errorlevel 1 goto :failed
 
-echo Building DocuMate for Windows x64...
-call npm.cmd run package:win:x64
-if errorlevel 1 goto :failed
-
-if not exist "release\windows-x64\latest.yml" goto :failed
 echo.
 echo Build succeeded. Files are in release\windows-x64\
 goto :success

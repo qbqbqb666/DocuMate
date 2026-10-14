@@ -31,6 +31,7 @@ class ToolPath:
 TOOL_PATH_ARGUMENTS: dict[str, tuple[tuple[str, PathAccess, bool], ...]] = {
     "list_workspace_files": (("relative_path", "read", False),),
     "search_workspace_files": (("relative_path", "read", False),),
+    "search_workspace_documents": (("relative_path", "read", False),),
     "get_workspace_file_info": (("relative_path", "read", False),),
     "read_text_file": (("relative_path", "read", False),),
     "search_text_in_files": (("relative_path", "read", False),),

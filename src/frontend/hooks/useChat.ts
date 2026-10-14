@@ -34,7 +34,7 @@ interface UseChatResult {
   threadId: string | null
   pendingTool: PendingTool | null
   statusMessage: string | null
-  send: (text: string) => Promise<void>
+  send: (text: string) => Promise<boolean>
   cancel: () => void
   clear: () => void
   loadThread: (threadId: string) => Promise<void>
@@ -56,6 +56,7 @@ export function useChat(
   const [threadId, setThreadId] = useState<string | null>(null)
   const [pendingTool, setPendingTool] = useState<PendingTool | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const sendingRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
   const activeRunRef = useRef<{ threadId: string; runId: string } | null>(null)
 
@@ -195,18 +196,31 @@ export function useChat(
     abortRef.current = controller
     activeRunRef.current = { threadId: activeThreadId, runId }
     setLoading(true)
+    let accepted = false
+    let failed = false
     try {
       const response = await apiFetch(path, {
         method: 'POST',
         body: JSON.stringify({ ...body, run_id: runId }),
         signal: controller.signal,
       })
-      await consumeSse(response, handleEvent)
+      await consumeSse(response, event => {
+        if (event.event === 'result' || event.event === 'approval') accepted = true
+        if (event.event === 'error') {
+          const error = event.data as Record<string, unknown>
+          if (error.error_type === 'RunCancelledError') accepted = true
+          else failed = true
+        }
+        handleEvent(event)
+      })
+      if (!accepted && !failed) throw new Error('对话连接已中断，请检查会话记录后重试')
+      return accepted && !failed
     } catch (reason) {
-      if (reason instanceof Error && reason.name === 'AbortError') return
+      if (reason instanceof Error && reason.name === 'AbortError') return true
       const message = reason instanceof Error ? reason.message : String(reason)
       setMessages((previous) => updateLastAssistant(previous, (item) => ({ ...item, error: message })))
       setConfigError(message)
+      return false
     } finally {
       setLoading(false)
       setStatusMessage(null)
@@ -216,25 +230,32 @@ export function useChat(
     }
   }, [handleEvent])
 
-  const send = useCallback(async (text: string) => {
-    if (!workspacePath || !text.trim() || loading) return
+  const send = useCallback(async (text: string): Promise<boolean> => {
+    if (!workspacePath || !text.trim() || loading || sendingRef.current) return false
+    sendingRef.current = true
+    setLoading(true)
     setConfigError(null)
-    let activeThreadId = threadId
-    if (!activeThreadId) activeThreadId = await startNewThread()
-    if (!activeThreadId) return
-    setMessages((previous) => [
-      ...previous,
-      { role: 'user', content: text.trim() },
-      { role: 'assistant', content: '' },
-    ])
-    await runStream(activeThreadId, `/api/threads/${encodeURIComponent(activeThreadId)}/turns/stream`, {
-      workspace_path: workspacePath,
-      project_id: projectId,
-      content: text.trim(),
-      permission,
-      provider,
-      model_name: modelName,
-    })
+    try {
+      let activeThreadId = threadId
+      if (!activeThreadId) activeThreadId = await startNewThread()
+      if (!activeThreadId) return false
+      setMessages((previous) => [
+        ...previous,
+        { role: 'user', content: text.trim() },
+        { role: 'assistant', content: '' },
+      ])
+      return await runStream(activeThreadId, `/api/threads/${encodeURIComponent(activeThreadId)}/turns/stream`, {
+        workspace_path: workspacePath,
+        project_id: projectId,
+        content: text.trim(),
+        permission,
+        provider,
+        model_name: modelName,
+      })
+    } finally {
+      sendingRef.current = false
+      setLoading(false)
+    }
   }, [loading, modelName, permission, projectId, provider, runStream, startNewThread, threadId, workspacePath])
 
   const submitPermission = useCallback(async (decision: PermissionDecision) => {

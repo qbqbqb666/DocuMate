@@ -4,6 +4,7 @@ from typing import Any
 from src.backend.services.app_config import AppConfigService
 from src.backend.services.conversation import create_conversation_coordinator
 from src.backend.services.document_library import DocumentLibrary
+from src.backend.services.retrieval import RetrievalService, get_retrieval_service
 
 
 @dataclass
@@ -16,6 +17,7 @@ class AppRuntime:
     owns_coordinator: bool = False
     ready: bool = False
     closed: bool = False
+    retrieval: RetrievalService | None = None
 
     @classmethod
     def create(
@@ -38,6 +40,7 @@ class AppRuntime:
                 else DocumentLibrary()
             ),
             owns_coordinator=coordinator is None,
+            retrieval=get_retrieval_service() if coordinator is None else None,
         )
 
     def start(self) -> None:
@@ -45,6 +48,8 @@ class AppRuntime:
             raise RuntimeError("不能重新启动已关闭的 AppRuntime")
         # 主动读取一次，使配置损坏在启动阶段立即暴露。
         self.app_config.workspace_info()
+        if self.retrieval is not None:
+            self.retrieval.start(lambda: [self.app_config.workspace_info()["path"]])
         recover = getattr(self.coordinator, "recover_unfinished_turns", None)
         if callable(recover):
             recover()
@@ -61,4 +66,6 @@ class AppRuntime:
             if self.owns_coordinator:
                 self.coordinator.history.close()
         finally:
+            if self.retrieval is not None:
+                self.retrieval.close()
             self.closed = True

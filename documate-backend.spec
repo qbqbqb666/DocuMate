@@ -9,6 +9,9 @@ binaries = []
 hiddenimports = []
 
 for package in (
+    "sqlite_vec",
+    "onnxruntime",
+    "tokenizers",
     "docx",
     "langchain",
     "langchain_core",
@@ -21,6 +24,13 @@ for package in (
     datas += package_datas
     binaries += package_binaries
     hiddenimports += package_hidden
+
+MODEL_ROOT = ROOT / "src" / "backend" / "data" / "models" / "multilingual-e5-small"
+for required in ("model.onnx", "tokenizer.json"):
+    if not (MODEL_ROOT / required).is_file():
+        raise RuntimeError(f"打包缺少本地 E5 资源：{MODEL_ROOT / required}")
+# 只携带模型目录直属资源，不包含下载的依赖 wheel 和测试资料。
+datas += [(str(resource), "models/multilingual-e5-small") for resource in MODEL_ROOT.iterdir() if resource.is_file()]
 
 a = Analysis(
     [str(ROOT / "src" / "backend" / "__main__.py")],
