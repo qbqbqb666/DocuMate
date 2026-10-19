@@ -59,7 +59,7 @@
       "identity": null
     },
     "win": {
-      "publish": [{ "provider": "generic", "url": "http://1.14.67.230/documate-updates/windows-${arch}/" }],
+      "publish": [{ "provider": "generic", "url": "https://documate.store/documate-updates/windows-${arch}/" }],
       "target": [{ "target": "nsis", "arch": ["x64"] }],
       "icon": "build/icons/windows/documate.ico",
       "artifactName": "DocuMate-Setup-v${version}-windows-${arch}.${ext}"

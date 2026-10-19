@@ -49,7 +49,7 @@ class AppRuntime:
         # 主动读取一次，使配置损坏在启动阶段立即暴露。
         self.app_config.workspace_info()
         if self.retrieval is not None:
-            self.retrieval.start(lambda: [self.app_config.workspace_info()["path"]])
+            self.retrieval.start(self.app_config.index_paths)
         recover = getattr(self.coordinator, "recover_unfinished_turns", None)
         if callable(recover):
             recover()

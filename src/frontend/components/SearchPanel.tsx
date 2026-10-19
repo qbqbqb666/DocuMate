@@ -33,7 +33,7 @@ export function SearchPanel({ onJumpToDoc }: Props) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKey}
-            placeholder="问点什么... (回车搜索)"
+            placeholder="输入搜索内容…（回车搜索）"
             className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-500"
           />
           <button

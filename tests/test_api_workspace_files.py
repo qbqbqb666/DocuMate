@@ -131,3 +131,99 @@ def test_unchanged_preview_skips_parser_and_changes_refresh(tmp_path: Path, monk
         assert updated["text"] == "修改后的新内容"
         assert updated["version"] != first["version"]
         assert len(calls) == 2
+
+
+def test_register_original_sources_scope_persistence_and_candidates(tmp_path: Path, monkeypatch):
+    from src.backend.api.workspace_files import get_index
+    from src.backend.api.chat import _project_context
+    from src.backend.services.retrieval import RetrievalService
+
+    root = tmp_path.resolve()
+    workspace, outside = root / "workspace", root / "outside"
+    workspace.mkdir(); outside.mkdir()
+    selected, unselected = outside / "selected.txt", outside / "unselected.txt"
+    selected.write_text("选中的资料", encoding="utf-8")
+    unselected.write_text("不能自动纳入的资料", encoding="utf-8")
+    (outside / ".hidden.txt").write_text("hidden")
+    (outside / "unsupported.png").write_bytes(b"image")
+    (outside / "linked.txt").symlink_to(selected)
+    config = AppConfigService(root / "config.json")
+    project = config.create_project("source test", [str(workspace)])
+    index = RetrievalService(root / "index.sqlite3")
+    queued = []
+    monkeypatch.setattr(index, "request_index", lambda paths: queued.append(paths))
+    app = create_app(FakeCoordinator(), config)
+    app.dependency_overrides[get_index] = lambda: index
+    body = {"project_id": project["id"], "workspace_path": str(workspace),
+            "sources": [{"path": str(selected), "kind": "file"}]}
+    with TestClient(app) as client:
+        candidates = client.post("/api/workspace-files/candidates", json={"paths": [str(outside)], "recursive": True})
+        assert candidates.status_code == 200
+        assert {file["filename"] for file in candidates.json()["files"]} == {"selected.txt", "unselected.txt"}
+        assert client.post("/api/workspace-files/register", json=body).status_code == 200
+        assert client.post("/api/workspace-files/register", json=body).status_code == 200
+        assert client.get("/api/projects").status_code == 200
+        assert "document_sources" not in client.get("/api/projects").json()[0]
+        assert client.post(f"/api/projects/{project['id']}/activate").status_code == 200
+        listing = client.get("/api/workspace-files").json()
+        assert listing["total_files"] == 1
+        assert [item["id"] for item in listing["roots"]].count(str(selected)) == 1
+        assert client.get("/api/workspace-files/preview", params={"path": str(selected)}).json()["text"] == "选中的资料"
+        assert client.get("/api/workspace-files/preview", params={"path": str(unselected)}).status_code == 422
+        assert client.get("/api/workspace-files/children", params={"path": str(outside)}).status_code == 422
+        status = client.get("/api/workspace-files/index-status").json()
+        assert status["pending"] == 1
+        assert client.post("/api/workspace-files/refresh").json()["queued"]
+        assert set(queued[-1]) == {str(workspace), str(selected)}
+        assert _project_context(project["id"], str(workspace), config)[1] == (str(workspace), str(selected))
+        reloaded = AppConfigService(config.path)
+        assert reloaded.workspace_sources()[-1] == {"path": str(selected), "kind": "file"}
+        selected.unlink()
+        assert client.get("/api/workspace-files").json()["roots"][-1]["missing"]
+        assert client.get("/api/workspace-files/index-status").json()["errors"][0]["status"] == "missing"
+        assert client.get("/api/workspace-files/preview", params={"path": str(selected)}).status_code == 404
+        assert _project_context(project["id"], str(workspace), config)[1] == (str(workspace),)
+        selected.symlink_to(unselected)
+        assert client.get("/api/workspace-files").json()["roots"][-1]["missing"]
+        assert client.get("/api/workspace-files/preview", params={"path": str(selected)}).status_code == 422
+        assert _project_context(project["id"], str(workspace), config)[1] == (str(workspace),)
+        assert str(selected) not in config.index_paths()
+    assert unselected.read_text(encoding="utf-8") == "不能自动纳入的资料"
+    assert not (workspace / ".documate").exists()
+    assert list(workspace.iterdir()) == []
+
+
+def test_register_folder_future_files_and_invalid_sources(tmp_path: Path, monkeypatch):
+    from src.backend.api.workspace_files import get_index
+    from src.backend.services.retrieval import RetrievalService
+
+    root = tmp_path.resolve()
+    workspace, external = root / "workspace", root / "external"
+    workspace.mkdir(); external.mkdir()
+    nested = external / "nested"
+    nested.mkdir()
+    (nested / "readme.md").write_text("文件夹资料")
+    config = AppConfigService(root / "config.json")
+    project = config.create_project("folder test", [str(workspace)])
+    index = RetrievalService(root / "index.sqlite3")
+    monkeypatch.setattr(index, "request_index", lambda paths: None)
+    app = create_app(FakeCoordinator(), config)
+    app.dependency_overrides[get_index] = lambda: index
+    body = {"project_id": project["id"], "workspace_path": str(workspace),
+            "sources": [{"path": str(external), "kind": "directory"}]}
+    with TestClient(app) as client:
+        assert client.post("/api/workspace-files/register", json=body).status_code == 200
+        (nested / "new.txt").write_text("后续新增资料")
+        assert client.get("/api/workspace-files").json()["total_files"] == 2
+        assert client.get("/api/workspace-files/children", params={"path": str(nested)}).json()["total"] == 2
+        before = config.path.read_bytes()
+        for source in ({"path": str(root / "missing.txt"), "kind": "file"},
+                       {"path": str(external), "kind": "file"},
+                       {"path": str(nested / "readme.md"), "kind": "directory"}):
+            assert client.post("/api/workspace-files/register", json={**body, "sources": [source]}).status_code == 422
+        link = root / "link"
+        link.symlink_to(external, target_is_directory=True)
+        assert client.post("/api/workspace-files/register", json={**body, "sources": [{"path": str(link), "kind": "directory"}]}).status_code == 422
+        assert client.post("/api/workspace-files/register", json={**body, "workspace_path": str(external)}).status_code == 422
+        assert config.path.read_bytes() == before
+    assert not (workspace / ".documate").exists()

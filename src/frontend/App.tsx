@@ -4,12 +4,15 @@ import { useWorkspace } from './hooks/useWorkspace'
 import { useSettings } from './hooks/useSettings'
 import { useProjects } from './hooks/useProjects'
 import { useStats } from './hooks/useStats'
+import { AddDocumentsDialog } from './components/AddDocumentsDialog'
 import { DocumentSidebar } from './components/DocumentSidebar'
 import { SearchPanel } from './components/SearchPanel'
 import { ChatPanel } from './components/ChatPanel'
 import { ProjectSidebar } from './components/ProjectSidebar'
 import { NewConversationPage } from './components/NewConversationPage'
 import { BrandMark } from './components/BrandMark'
+import { BrandWordmark } from './components/BrandWordmark'
+import { ThemePicker } from './components/ThemePicker'
 import { Icon } from './components/Icon'
 import { AuthProvider, useAuth } from './auth/useAuth'
 import { AuthGuard } from './auth/AuthGuard'
@@ -21,7 +24,7 @@ type AppArea = 'files' | 'workspace'
 
 function App() {
   const workspace = useWorkspace()
-  const { roots, count, loading, error, fetchDetail, refresh: refreshDocs } = useWorkspaceFiles(workspace.info?.path)
+  const { roots, count, loading, error, index, indexError, refreshing, refreshAll, refreshIndexStatus, fetchDetail, refresh: refreshDocs } = useWorkspaceFiles(workspace.info?.path)
   const settings = useSettings()
   const projects = useProjects()
   const stats = useStats(workspace.info?.path)
@@ -33,6 +36,7 @@ function App() {
   const [area, setArea] = useState<AppArea>('files')
   const [toast, setToast] = useState<string | null>(null)
   const [showProfile, setShowProfile] = useState(false)
+  const [showAddDocuments, setShowAddDocuments] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false)
   const [apiKeyInput, setApiKeyInput] = useState('')
@@ -43,7 +47,7 @@ function App() {
     { provider: 'siliconflow', configured: false, last4: null },
     { provider: 'deepseek', configured: false, last4: null },
   ])
-  const [agentName, setAgentName] = useState('DocuMate Agent')
+  const [agentName, setAgentName] = useState('新对话')
   const [newSessionRequest, setNewSessionRequest] = useState(0)
   const [requestedThreadId, setRequestedThreadId] = useState<string | null>(null)
   const [showNewConversation, setShowNewConversation] = useState(false)
@@ -52,6 +56,7 @@ function App() {
   useEffect(() => {
     refreshDocs()
     setSelectedId(null)
+    setShowAddDocuments(false)
     if (workspace.info?.path && window.documate?.watchWorkspace) window.documate.watchWorkspace(workspace.info.path)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace.info?.path])
@@ -90,8 +95,10 @@ function App() {
     }
     setDetailLoading(true)
     void load()
+    const refreshPreview = () => { void load() }
+    window.addEventListener('documate:files-refreshed', refreshPreview)
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void load() }, 5000)
-    return () => { cancelled = true; window.clearInterval(timer) }
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('documate:files-refreshed', refreshPreview) }
   }, [selectedId, fetchDetail])
 
   const notify = (text: string) => {
@@ -177,7 +184,6 @@ function App() {
 
   if (workspace.loading || !workspace.info) return <LoadingWorkspace />
 
-  const workspaceName = workspace.info.path.split('/').filter(Boolean).at(-1) || '我的工作区'
   const activeProject = projects.projects.find((project) => project.id === activeProjectId) || projects.projects.find((project) => project.is_active) || projects.projects[0]
   const displayName = user?.display_name || user?.username || '用户'
 
@@ -189,9 +195,10 @@ function App() {
       <header className="dm-topbar" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
         <div className="dm-brand">
           <BrandMark size={32} />
-          <span>DocuMate</span>
+          <BrandWordmark />
         </div>
-        <div className="dm-breadcrumb"><Icon name="folder" size={16} /><span>{activeProject?.name || workspaceName}</span><Icon name="chevron" size={14} /><span className="dm-breadcrumb-muted">{showNewConversation ? '新对话' : area === 'files' ? '文件区' : '工作区'}</span></div>
+        {(area === 'workspace' || showNewConversation) && <div className="dm-task-heading"><Icon name="folder" size={18} /><span title={showNewConversation ? '新对话' : agentName}>{showNewConversation ? '新对话' : agentName}</span></div>}
+        {area === 'files' && !showNewConversation && selectedId && detail?.id === selectedId && <div className="dm-task-heading"><Icon name="file" size={18} /><span title={detail.filename}>{detail.filename}</span></div>}
         <div className="dm-header-actions" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           <button className="dm-icon-button" onClick={() => notify('当前没有新的公告')} title="公告"><Icon name="sparkle" /></button>
           <button className="dm-icon-button" onClick={openProfile} title="个人中心"><Icon name="settings" /></button>
@@ -205,34 +212,34 @@ function App() {
           <div className="dm-workspace-switcher"><button className="dm-new-chat-primary" onClick={() => { setShowNewConversation(true); setArea('workspace') }}><Icon name="plus" size={17} />新对话</button></div>
 
           <nav className="dm-area-tabs">
-            <button className={area === 'files' ? 'is-active' : ''} onClick={() => setArea('files')}><Icon name="folder" size={17} />文件区</button>
-            <button className={area === 'workspace' ? 'is-active' : ''} onClick={() => setArea('workspace')}><Icon name="message" size={17} />工作区</button>
+            <button className={area === 'files' ? 'is-active' : ''} aria-current={area === 'files' ? 'page' : undefined} onClick={() => setArea('files')}><Icon name="folder" size={17} />文件区</button>
+            <button className={area === 'workspace' ? 'is-active' : ''} aria-current={area === 'workspace' ? 'page' : undefined} onClick={() => setArea('workspace')}><Icon name="message" size={17} />工作区</button>
           </nav>
 
           <div className="dm-sidebar-content">
             {area === 'files' ? (
-              <DocumentSidebar roots={roots} count={count} selectedId={selectedId} onSelect={setSelectedId} loading={loading} />
+              <DocumentSidebar roots={roots} selectedId={selectedId} onSelect={setSelectedId} loading={loading} refreshing={refreshing} index={index} indexError={indexError} onAdd={() => setShowAddDocuments(true)} onRefresh={() => { void refreshAll().catch(reason => notify(reason instanceof Error ? reason.message : String(reason))) }} />
             ) : (
-              <ProjectSidebar projects={projects.projects} activeThreadId={requestedThreadId} resetKey={showNewConversation ? 'new-conversation' : requestedThreadId || 'none'} onOpenThread={(project, threadId, title) => void openThread(project, threadId, title)} onNewThread={(project) => void createThreadForProject(project)} onDeleteThread={(threadId) => { if (threadId === requestedThreadId) { setRequestedThreadId(null); setAgentName('DocuMate Agent') } }} />
+              <ProjectSidebar projects={projects.projects} activeThreadId={requestedThreadId} resetKey={showNewConversation ? 'new-conversation' : requestedThreadId || 'none'} onOpenThread={(project, threadId, title) => void openThread(project, threadId, title)} onNewThread={(project) => void createThreadForProject(project)} onDeleteThread={(threadId) => { if (threadId === requestedThreadId) { setRequestedThreadId(null); setAgentName('新对话') } }} />
             )}
           </div>
 
           <div className="dm-sidebar-footer">
-            {area === 'files' && <button className="dm-quiet-button" onClick={() => void refreshDocs()}>刷新目录</button>}
             {error && <div className="dm-inline-error">{error}</div>}
-            <button className="dm-quiet-button" onClick={() => window.documate?.openFolder ? workspace.openInFinder() : notify('浏览器预览模式不支持打开访达；Electron 版可直接打开工作区。')}><Icon name="external" size={15} />在访达中打开</button>
+            <button className="dm-quiet-button dm-open-folder-button" onClick={() => window.documate?.openFolder ? workspace.openInFinder() : notify('浏览器预览模式不支持打开访达；Electron 版可直接打开工作区。')}><Icon name="external" size={15} />在访达中打开</button>
           </div>
         </aside>
 
         <main className="dm-main">
-          {showNewConversation ? <NewConversationPage onCancel={() => setShowNewConversation(false)} onCreateProject={async (name, folders) => { const project = await projects.create(name, folders); await createThreadForProject(project) }} /> : area === 'files' ? (
-            selectedId && detailLoading ? <LoadingWorkspace /> : selectedId && detail ? <DocumentViewer doc={detail} onChat={() => openAgent(`${detail.filename} Agent`, true)} onMore={() => notify(detail.saved_path)} /> : <FileEmptyState count={count} error={detailError} />
+          {showNewConversation ? <NewConversationPage projects={projects.projects} projectsLoading={projects.loading} projectsError={projects.error} onUseProject={createThreadForProject} onCancel={() => setShowNewConversation(false)} onCreateProject={async (name, folders) => { const project = await projects.create(name, folders); await createThreadForProject(project) }} /> : area === 'files' ? (
+            selectedId && detailLoading ? <LoadingWorkspace /> : selectedId && detail ? <DocumentViewer doc={detail} onChat={() => openAgent(`${detail.filename} Agent`, true)} /> : <FileEmptyState count={count} error={detailError} />
           ) : (
-            <WorkspaceView documentsCount={count} workspacePath={activeProject?.primary_path || workspace.info.path} projectId={activeProject?.id} agentName={agentName} newSessionRequest={newSessionRequest} requestedThreadId={requestedThreadId} trustAgent={settings.settings.trust_agent} provider={settings.settings.provider} modelName={settings.settings.model_name} models={settings.models} settingsLoading={settings.loading} onSettingsChange={(patch) => void settings.update(patch)} onJumpToDoc={handleJumpToDoc} />
+            <WorkspaceView workspacePath={activeProject?.primary_path || workspace.info.path} projectId={activeProject?.id} onTitleChange={setAgentName} newSessionRequest={newSessionRequest} requestedThreadId={requestedThreadId} trustAgent={settings.settings.trust_agent} provider={settings.settings.provider} modelName={settings.settings.model_name} models={settings.models} settingsLoading={settings.loading} onSettingsChange={(patch) => void settings.update(patch)} onJumpToDoc={handleJumpToDoc} />
           )}
         </main>
       </div>
 
+      {showAddDocuments && workspace.info && <AddDocumentsDialog key={workspace.info.path} workspacePath={workspace.info.path} projectId={activeProjectId || undefined} onClose={() => setShowAddDocuments(false)} onAdded={() => { setShowAddDocuments(false); void refreshDocs(); void refreshIndexStatus(); window.dispatchEvent(new Event('documate:files-refreshed')); notify('资料已加入，正在建立本地索引') }} />}
       {showSearch && <div className="dm-search-overlay"><button className="dm-scrim" aria-label="关闭搜索" onClick={() => setShowSearch(false)} /><section className="dm-search-sheet"><div className="dm-sheet-title"><div><Icon name="search" size={19} />搜索资料</div><button className="dm-icon-button" onClick={() => setShowSearch(false)}><Icon name="close" /></button></div><SearchPanel onJumpToDoc={handleJumpToDoc} /></section></div>}
       {showApiKeyDialog && <ApiKeyDialog value={apiKeyInput} provider={apiProvider} error={apiKeyError} saving={apiKeySaving} onChange={setApiKeyInput} onCancel={() => setShowApiKeyDialog(false)} onSave={() => void saveApiKey()} />}
       {showProfile && <ProfileDrawer name={displayName} account={user?.email || user?.username || ''} localMode={localMode} apiKeys={apiKeyStatuses} stats={stats.stats} onClose={() => setShowProfile(false)} onLogout={logout} onNotice={notify} onConfigureApiKey={(provider) => openApiKeyDialog(provider)} onDeleteApiKey={async (provider) => {
@@ -247,19 +254,19 @@ function FileEmptyState({ count, error }: { count: number; error: string | null 
   return <section className="dm-empty-state"><div className="dm-empty-mark"><Icon name="folder" size={35} /></div><h1>{error ? '无法预览此文件' : count ? '选择一份资料继续阅读' : '浏览你的工作区文件'}</h1><p>{error || (count ? `当前项目有 ${count.toLocaleString()} 份可解析资料，展开左侧目录选择原文件。` : '将资料保存到当前项目文件夹，文件区会自动更新。')}</p><div className="dm-empty-note">直接使用本地原文件 · 支持 PDF / DOCX / XLSX / TXT / Markdown</div></section>
 }
 
-function WorkspaceView({ documentsCount, workspacePath, projectId, agentName, newSessionRequest, requestedThreadId, trustAgent, provider, modelName, models, settingsLoading, onSettingsChange, onJumpToDoc }: { documentsCount: number; workspacePath: string; projectId?: string; agentName: string; newSessionRequest: number; requestedThreadId: string | null; trustAgent: boolean; provider: 'siliconflow' | 'deepseek'; modelName: string; models: Array<{ provider: 'siliconflow' | 'deepseek'; model_name: string; display_name: string }>; settingsLoading: boolean; onSettingsChange: (patch: { trust_agent?: boolean; provider?: 'siliconflow' | 'deepseek'; model_name?: string }) => void; onJumpToDoc: (id: string) => void }) {
-  return <section className="dm-workspace-view"><header className="dm-workspace-header"><div className="dm-session-title"><span>{agentName}</span><span className="dm-session-chevron">⌄</span></div><div className="dm-session-context"><Icon name="file" size={14} />对话 · 关联当前项目</div><div className="dm-workspace-meta"><span><Icon name="folder" size={15} />{documentsCount} 份资料</span><span><i className="dm-status online" />已就绪</span></div></header><div className="dm-chat-surface"><ChatPanel workspacePath={workspacePath} projectId={projectId} onJumpToDoc={onJumpToDoc} newSessionRequest={newSessionRequest} requestedThreadId={requestedThreadId} trustAgent={trustAgent} provider={provider} modelName={modelName} models={models} settingsLoading={settingsLoading} onSettingsChange={onSettingsChange} /></div></section>
+function WorkspaceView({ workspacePath, projectId, onTitleChange, newSessionRequest, requestedThreadId, trustAgent, provider, modelName, models, settingsLoading, onSettingsChange, onJumpToDoc }: { workspacePath: string; projectId?: string; onTitleChange: (title: string) => void; newSessionRequest: number; requestedThreadId: string | null; trustAgent: boolean; provider: 'siliconflow' | 'deepseek'; modelName: string; models: Array<{ provider: 'siliconflow' | 'deepseek'; model_name: string; display_name: string }>; settingsLoading: boolean; onSettingsChange: (patch: { trust_agent?: boolean; provider?: 'siliconflow' | 'deepseek'; model_name?: string }) => void; onJumpToDoc: (id: string) => void }) {
+  return <section className="dm-workspace-view"><div className="dm-chat-surface"><ChatPanel workspacePath={workspacePath} projectId={projectId} onTitleChange={onTitleChange} onJumpToDoc={onJumpToDoc} newSessionRequest={newSessionRequest} requestedThreadId={requestedThreadId} trustAgent={trustAgent} provider={provider} modelName={modelName} models={models} settingsLoading={settingsLoading} onSettingsChange={onSettingsChange} /></div></section>
 }
 
-function DocumentViewer({ doc, onChat, onMore }: { doc: FilePreview; onChat: () => void; onMore: () => void }) {
+function DocumentViewer({ doc, onChat }: { doc: FilePreview; onChat: () => void }) {
   const date = new Date(doc.uploaded_at).toLocaleDateString('zh-CN')
-  return <section className="dm-document-viewer"><header className="dm-document-header"><div className="dm-document-title"><div className="dm-file-icon"><Icon name="file" size={26} /></div><div><p className="dm-eyebrow">文件区 / 原文件</p><h1>{doc.filename}</h1><p>{doc.char_count.toLocaleString()} 字 · {(doc.size_bytes / 1024).toFixed(1)} KB · {date}</p></div></div><div className="dm-document-actions"><button onClick={onChat}><Icon name="message" size={16} />进入工作区</button><button onClick={onMore} title="更多操作"><Icon name="more" /></button></div></header><div className="dm-document-body"><p className="dm-empty-note">{doc.saved_path}{doc.truncated ? ' · 预览仅显示前 20 万字，索引不受此限制' : ''}</p>{doc.text ? <pre>{doc.text}</pre> : <div className="dm-no-text"><Icon name="file" size={28} /><h2>暂时没有可预览的文本</h2><p>该文件可能是扫描件，后续可在工作区让 Agent 协助识别与整理。</p><button onClick={onChat}>进入工作区</button></div>}</div></section>
+  return <section className="dm-document-viewer"><header className="dm-document-header"><div className="dm-document-title"><div className="dm-file-icon" data-file-type={doc.filename.split('.').at(-1)?.toLowerCase()}><Icon name="file" size={26} /></div><div className="dm-document-title-copy"><p className="dm-eyebrow">文件区 / 原文件</p><h1 title={doc.filename}>{doc.filename}</h1><p>{doc.char_count.toLocaleString()} 字 · {(doc.size_bytes / 1024).toFixed(1)} KB · {date}</p></div></div><div className="dm-document-actions"><button onClick={onChat}><Icon name="message" size={16} />进入工作区</button></div></header><div className="dm-document-path"><Icon name="folder" size={15} /><span title={doc.saved_path}>{doc.saved_path}</span></div><div className="dm-document-body">{doc.truncated && <p className="dm-preview-note">预览仅显示前 20 万字，索引不受此限制</p>}{doc.text ? <pre>{doc.text}</pre> : <div className="dm-no-text"><Icon name="file" size={28} /><h2>暂时没有可预览的文本</h2><p>该文件可能是扫描件，后续可在工作区让 Agent 协助识别与整理。</p><button onClick={onChat}>进入工作区</button></div>}</div></section>
 }
 
 function ProfileDrawer({ name, account, localMode, apiKeys, stats, onClose, onLogout, onNotice, onConfigureApiKey, onDeleteApiKey }: { name: string; account: string; localMode: boolean; apiKeys: ApiKeyStatus[]; stats: { document_count: number; thread_count: number; total_tokens: number }; onClose: () => void; onLogout: () => Promise<void>; onNotice: (message: string) => void; onConfigureApiKey: (provider: 'siliconflow' | 'deepseek') => void; onDeleteApiKey: (provider: 'siliconflow' | 'deepseek') => Promise<void> }) {
   const initials = name.slice(0, 1).toUpperCase()
   const keyStatus = (provider: 'siliconflow' | 'deepseek') => apiKeys.find((item) => item.provider === provider) || { provider, configured: false, last4: null }
-  return <div className="dm-profile-overlay"><button className="dm-profile-scrim" aria-label="关闭个人中心" onClick={onClose} /><aside className="dm-profile-drawer"><div className="dm-profile-hero"><header><button className="dm-icon-button" onClick={onClose}><Icon name="close" /></button></header><section className="dm-user-card"><div className="dm-user-avatar">{initials}</div><div><h2>{name}</h2><p>{account}</p><span>{localMode ? 'DocuMate 本地模式' : 'DocuMate 成员'}</span></div></section><section className="dm-profile-stats"><div><strong>{stats.document_count}</strong><span>文档</span></div><div><strong>{stats.thread_count}</strong><span>对话</span></div><div><strong>{stats.total_tokens.toLocaleString()}</strong><span>tokens</span></div></section></div><div className="dm-profile-scroll">{!localMode && <section className="dm-profile-section"><div className="dm-profile-section-title"><span><Icon name="settings" size={17} />账号</span></div><button className="dm-profile-row" onClick={() => onNotice('账号和密码编辑将跟随账户管理模块开放。')}>修改账号 <span>›</span></button><button className="dm-profile-row" onClick={() => onNotice('账号和密码编辑将跟随账户管理模块开放。')}>修改密码 <span>›</span></button></section>}<section className="dm-profile-section"><div className="dm-profile-section-title"><span><Icon name="database" size={17} />API Key</span><em>本机保存</em></div><p className="dm-profile-copy">分别配置模型供应商；密钥仅保存到本机应用数据目录。</p><ApiKeyProviderRow label="SiliconFlow" status={keyStatus('siliconflow')} onConfigure={() => onConfigureApiKey('siliconflow')} onDelete={() => void onDeleteApiKey('siliconflow')} /><ApiKeyProviderRow label="DeepSeek" status={keyStatus('deepseek')} onConfigure={() => onConfigureApiKey('deepseek')} onDelete={() => void onDeleteApiKey('deepseek')} /></section><section className="dm-profile-section"><div className="dm-profile-section-title"><span><Icon name="database" size={17} />关于</span></div><div className="dm-profile-row is-static">版本 <span>v{window.documate?.version || '开发版'}</span></div><button className="dm-profile-row" onClick={() => onNotice('开发者文档会随首个公开版本一起提供。')}>开发者文档 <span>↗</span></button></section></div>{!localMode && <footer><button className="dm-logout" onClick={onLogout}><Icon name="logout" size={17} />退出登录</button></footer>}</aside></div>
+  return <div className="dm-profile-overlay"><button className="dm-profile-scrim" aria-label="关闭个人中心" onClick={onClose} /><aside className="dm-profile-drawer"><div className="dm-profile-hero"><header><button className="dm-icon-button" onClick={onClose} aria-label="关闭个人中心"><Icon name="close" /></button></header><section className="dm-user-card"><div className="dm-user-avatar">{initials}</div><div><h2>{name}</h2><p>{account}</p><span>{localMode ? 'DocuMate 本地模式' : 'DocuMate 成员'}</span></div></section><section className="dm-profile-stats"><div><strong>{stats.document_count}</strong><span>文档</span></div><div><strong>{stats.thread_count}</strong><span>对话</span></div><div><strong>{stats.total_tokens.toLocaleString()}</strong><span>tokens</span></div></section></div><div className="dm-profile-scroll"><ThemePicker />{!localMode && <section className="dm-profile-section"><div className="dm-profile-section-title"><span><Icon name="settings" size={17} />账号</span></div><button className="dm-profile-row" onClick={() => onNotice('账号和密码编辑将跟随账户管理模块开放。')}>修改账号 <span>›</span></button><button className="dm-profile-row" onClick={() => onNotice('账号和密码编辑将跟随账户管理模块开放。')}>修改密码 <span>›</span></button></section>}<section className="dm-profile-section"><div className="dm-profile-section-title"><span><Icon name="database" size={17} />API Key</span><em>本机保存</em></div><p className="dm-profile-copy">分别配置模型供应商；密钥仅保存到本机应用数据目录。</p><ApiKeyProviderRow label="SiliconFlow" status={keyStatus('siliconflow')} onConfigure={() => onConfigureApiKey('siliconflow')} onDelete={() => void onDeleteApiKey('siliconflow')} /><ApiKeyProviderRow label="DeepSeek" status={keyStatus('deepseek')} onConfigure={() => onConfigureApiKey('deepseek')} onDelete={() => void onDeleteApiKey('deepseek')} /></section><section className="dm-profile-section"><div className="dm-profile-section-title"><span><Icon name="database" size={17} />关于</span></div><div className="dm-profile-row is-static">版本 <span>v{window.documate?.version || '开发版'}</span></div><button className="dm-profile-row" onClick={() => onNotice('开发者文档会随首个公开版本一起提供。')}>开发者文档 <span>↗</span></button></section></div>{!localMode && <footer><button className="dm-logout" onClick={onLogout}><Icon name="logout" size={17} />退出登录</button></footer>}</aside></div>
 }
 
 function ApiKeyProviderRow({ label, status, onConfigure, onDelete }: { label: string; status: ApiKeyStatus; onConfigure: () => void; onDelete: () => void }) {

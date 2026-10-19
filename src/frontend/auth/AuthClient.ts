@@ -7,7 +7,7 @@
  *   - 业务错误 (4xx/5xx) 统一抛 AuthError
  */
 
-const BASE = (import.meta.env.VITE_AUTH_SERVICE_URL || 'http://1.14.67.230/documate-auth').replace(/\/$/, '')
+const BASE = (import.meta.env.VITE_AUTH_SERVICE_URL || 'https://documate.store/documate-auth').replace(/\/$/, '')
 const LOCAL_BASE = (import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8765').replace(/\/$/, '')
 
 export interface UserInfo {

@@ -105,3 +105,49 @@ def test_packager_selects_matching_backend_and_output(arch):
     }]
     assert config["extraResources"] == [{"from": str(backend), "to": "backend/documate-backend"}]
     assert json.dumps(package, sort_keys=True) == before
+
+
+def write_pe(path, arch):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    binary = bytearray(134)
+    binary[:2] = b'MZ'
+    struct.pack_into('<I', binary, 0x3C, 128)
+    binary[128:132] = b'PE\0\0'
+    struct.pack_into('<H', binary, 132, MACHINES[arch])
+    path.write_bytes(binary)
+    return path
+
+
+def test_x64_runtime_repair_uses_numpy_bundled_alias_and_python_runtime(tmp_path):
+    backend = tmp_path / 'backend'
+    msvcp = write_pe(backend / '_internal/msvcp140.dll', 'arm64')
+    vcruntime = write_pe(backend / '_internal/vcruntime140.dll', 'arm64')
+    numpy_crt = write_pe(backend / '_internal/numpy.libs/msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll', 'x64')
+    python_crt = write_pe(tmp_path / 'x64-python/vcruntime140.dll', 'x64')
+    replacements = package_windows.repair_x64_vc_runtime(backend, [tmp_path / 'x64-python', backend])
+    assert len(replacements) == 2
+    assert msvcp.read_bytes() == numpy_crt.read_bytes()
+    assert vcruntime.read_bytes() == python_crt.read_bytes()
+    check_pe(msvcp, 'x64')
+    check_pe(vcruntime, 'x64')
+    assert package_windows.repair_x64_vc_runtime(backend, [backend]) == []
+
+
+def test_x64_runtime_repair_missing_source_does_not_accept_arm_or_modify(tmp_path):
+    backend = tmp_path / 'backend'
+    target = write_pe(backend / 'msvcp140.dll', 'arm64')
+    source = write_pe(tmp_path / 'arm-runtime/msvcp140-12345678.dll', 'arm64')
+    original = target.read_bytes()
+    with pytest.raises(RuntimeError, match='缺少.*x64'):
+        package_windows.repair_x64_vc_runtime(backend, [source.parent])
+    assert target.read_bytes() == original
+    with pytest.raises(RuntimeError, match='架构不匹配'):
+        check_pe(target, 'x64')
+
+
+def test_runtime_repair_does_not_relax_other_binary_architecture_checks(tmp_path):
+    backend = tmp_path / 'backend'
+    wrong = write_pe(backend / 'onnxruntime.pyd', 'arm64')
+    assert package_windows.repair_x64_vc_runtime(backend, [backend]) == []
+    with pytest.raises(RuntimeError, match='架构不匹配'):
+        check_pe(wrong, 'x64')

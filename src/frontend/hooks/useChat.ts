@@ -34,9 +34,8 @@ interface UseChatResult {
   threadId: string | null
   pendingTool: PendingTool | null
   statusMessage: string | null
-  send: (text: string) => Promise<boolean>
+  send: (text: string, onSubmitted?: () => void) => Promise<boolean>
   cancel: () => void
-  clear: () => void
   loadThread: (threadId: string) => Promise<void>
   startNewThread: () => Promise<string | null>
   submitPermission: (decision: PermissionDecision) => Promise<void>
@@ -56,6 +55,7 @@ export function useChat(
   const [threadId, setThreadId] = useState<string | null>(null)
   const [pendingTool, setPendingTool] = useState<PendingTool | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const generation = useRef(0)
   const sendingRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
   const activeRunRef = useRef<{ threadId: string; runId: string } | null>(null)
@@ -93,11 +93,9 @@ export function useChat(
     setStatusMessage(null)
   }, [])
 
-  const clear = useCallback(() => {
+  useEffect(() => () => {
+    generation.current += 1
     cancel()
-    setMessages([])
-    setPendingTool(null)
-    setConfigError(null)
   }, [cancel])
 
   useEffect(() => {
@@ -111,6 +109,7 @@ export function useChat(
   const loadThread = useCallback(async (id: string) => {
     if (!workspacePath) return
     cancel()
+    const currentGeneration = generation.current
     setConfigError(null)
     try {
       const query = new URLSearchParams({ workspace_path: workspacePath })
@@ -120,6 +119,7 @@ export function useChat(
         apiRequest<{ pending_approval: ApprovalPayload | null }>(`${basePath}?${query}`),
         apiRequest<{ artifacts: ThreadArtifact[] }>(`${basePath}/artifacts?${query}`),
       ])
+      if (generation.current !== currentGeneration) return
       setMessages(historyMessages(data.messages, artifactData.artifacts))
       setThreadId(id)
       setPendingTool(detail.pending_approval)
@@ -131,12 +131,14 @@ export function useChat(
   const startNewThread = useCallback(async (): Promise<string | null> => {
     if (!workspacePath) return null
     cancel()
+    const currentGeneration = generation.current
     setConfigError(null)
     try {
       const result = await apiRequest<{ thread_id: string }>('/api/threads', {
         method: 'POST',
         body: JSON.stringify({ workspace_path: workspacePath, project_id: projectId }),
       })
+      if (generation.current !== currentGeneration) return null
       setThreadId(result.thread_id)
       setMessages([])
       setPendingTool(null)
@@ -190,12 +192,14 @@ export function useChat(
     activeThreadId: string,
     path: string,
     body: Record<string, unknown>,
+    onSubmitted?: () => void,
   ) => {
     const controller = new AbortController()
     const runId = crypto.randomUUID()
     abortRef.current = controller
     activeRunRef.current = { threadId: activeThreadId, runId }
     setLoading(true)
+    let submitted = false
     let accepted = false
     let failed = false
     try {
@@ -205,6 +209,10 @@ export function useChat(
         signal: controller.signal,
       })
       await consumeSse(response, event => {
+        if (!submitted && ['status', 'model_chunk', 'result', 'approval'].includes(event.event)) {
+          submitted = true
+          onSubmitted?.()
+        }
         if (event.event === 'result' || event.event === 'approval') accepted = true
         if (event.event === 'error') {
           const error = event.data as Record<string, unknown>
@@ -230,15 +238,16 @@ export function useChat(
     }
   }, [handleEvent])
 
-  const send = useCallback(async (text: string): Promise<boolean> => {
+  const send = useCallback(async (text: string, onSubmitted?: () => void): Promise<boolean> => {
     if (!workspacePath || !text.trim() || loading || sendingRef.current) return false
+    const currentGeneration = generation.current
     sendingRef.current = true
     setLoading(true)
     setConfigError(null)
     try {
       let activeThreadId = threadId
       if (!activeThreadId) activeThreadId = await startNewThread()
-      if (!activeThreadId) return false
+      if (!activeThreadId || currentGeneration !== generation.current) return false
       setMessages((previous) => [
         ...previous,
         { role: 'user', content: text.trim() },
@@ -251,7 +260,7 @@ export function useChat(
         permission,
         provider,
         model_name: modelName,
-      })
+      }, onSubmitted)
     } finally {
       sendingRef.current = false
       setLoading(false)
@@ -270,7 +279,7 @@ export function useChat(
   }, [loading, pendingTool, projectId, runStream, threadId, workspacePath])
 
   return {
-    messages, loading, threadId, pendingTool, statusMessage, send, cancel, clear,
+    messages, loading, threadId, pendingTool, statusMessage, send, cancel,
     loadThread, startNewThread, submitPermission, configError,
   }
 }

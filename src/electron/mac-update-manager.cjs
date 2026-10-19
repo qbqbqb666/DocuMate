@@ -1,7 +1,7 @@
 const { EventEmitter } = require('node:events')
 
-const MAC_VERSION_URL = 'http://1.14.67.230/documate/mac-version.json'
-const DOWNLOAD_PAGE_URL = 'http://1.14.67.230/documate/#downloads'
+const MAC_VERSION_URL = 'https://documate.store/documate/mac-version.json'
+const DOWNLOAD_PAGE_URL = 'https://documate.store/documate/#downloads'
 
 function isNewerRelease(latest, current) {
   const parse = (version) => {

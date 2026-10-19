@@ -199,7 +199,9 @@ def _project_context(
     if not project_id:
         return workspace_path, (workspace_path,)
     project = app_config.project(project_id)
-    return project["primary_path"], tuple(project["folder_paths"])
+    paths = [source["path"] for source in app_config.workspace_sources(project["primary_path"])
+             if app_config.source_exists(source)]
+    return project["primary_path"], tuple(paths)
 
 
 def turn_result_response(result: TurnResult) -> TurnResultResponse:

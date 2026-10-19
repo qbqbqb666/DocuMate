@@ -75,7 +75,7 @@ function createBackendManager() {
       DOCUMATE_DEFAULT_WORKSPACE: launch.defaultWorkspace,
       DOCUMATE_APP_ENV: launch.appEnv,
       DOCUMATE_PARENT_PID: String(process.pid),
-      DOCUMATE_AUTH_SERVICE_URL: 'http://1.14.67.230/documate-auth',
+      DOCUMATE_AUTH_SERVICE_URL: 'https://documate.store/documate-auth',
     },
   })
 }
@@ -147,6 +147,18 @@ ipcMain.handle('workspace:pick-folder', async (_event, options = {}) => {
     properties: ['openDirectory', 'createDirectory'],
   })
   return result.canceled ? null : result.filePaths[0] || null
+})
+ipcMain.handle('workspace:pick-files', async (event) => {
+  if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) {
+    throw new Error('无效的文件选择请求')
+  }
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '选择要加入的资料',
+    buttonLabel: '选择资料',
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: '资料文件', extensions: ['pdf', 'docx', 'xlsx', 'txt', 'md'] }],
+  })
+  return result.canceled ? [] : result.filePaths
 })
 ipcMain.handle('shell:open-folder', async (_event, target) => !target ? false : (await shell.openPath(target)) === '')
 ipcMain.handle('shell:open-file', async (_event, target) => !target ? false : (await shell.openPath(target)) === '')

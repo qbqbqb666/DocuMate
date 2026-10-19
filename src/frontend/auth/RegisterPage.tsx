@@ -12,7 +12,6 @@ export function RegisterPage({ onSwitchToLogin }: { onSwitchToLogin: () => void 
     <div className="auth-form-wrap"><p className="auth-kicker">创建账号</p><h2>开始使用 DocuMate</h2>
       <p className="auth-subtitle">验证邮箱并设置密码，创建你的账号。</p>
       <EmailVerificationForm purpose="register" onSubmit={register} onPasswordFocus={setRobotMood} />
-      <p className="auth-terms">账号信息仅用于 DocuMate 登录，文档内容仍保留在本机。</p>
       <p className="auth-switch">已经有账号？<button onClick={onSwitchToLogin}>返回登录</button></p>
     </div></main></div>
 }

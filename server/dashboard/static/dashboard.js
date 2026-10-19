@@ -50,7 +50,7 @@ async function refresh() {
   const currentGeneration=generation;
   try {
     const params=new URLSearchParams({q:query,user_page:userPage,session_page:1});
-    const response=await fetch("/api/dashboard?"+params, {cache:"no-store", signal:AbortSignal.timeout(12000)});
+    const response=await fetch("api/dashboard?"+params, {cache:"no-store", signal:AbortSignal.timeout(12000)});
     if(currentGeneration!==generation)return;
     if (response.status===401) {loginScreen(); return;}
     if (!response.ok) throw new Error("读取失败，稍后自动重试。上次数据仅供参考。");
@@ -72,7 +72,7 @@ async function refresh() {
 $("login-form").addEventListener("submit", async event => {
   event.preventDefault(); $("login-button").disabled=true; $("login-error").textContent="";
   try {
-    const response=await fetch("/api/login", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:$("username").value,password:$("password").value}),signal:AbortSignal.timeout(12000)});
+    const response=await fetch("api/login", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:$("username").value,password:$("password").value}),signal:AbortSignal.timeout(12000)});
     const result=await response.json();
     if (!response.ok) throw new Error(result.detail || "登录失败");
     $("password").value=""; userPage=1; query=""; $("search").value="";
@@ -81,7 +81,7 @@ $("login-form").addEventListener("submit", async event => {
   finally {$("login-button").disabled=false;}
 });
 $("logout").addEventListener("click", async () => {
-  try {const response=await fetch("/api/logout",{method:"POST",signal:AbortSignal.timeout(12000)}); if(!response.ok) throw new Error(); loginScreen();}
+  try {const response=await fetch("api/logout",{method:"POST",signal:AbortSignal.timeout(12000)}); if(!response.ok) throw new Error(); loginScreen();}
   catch {$("board-error").textContent="退出失败，请重试。"; $("board-error").hidden=false;}
 });
 $("refresh").addEventListener("click",refresh);
@@ -95,7 +95,7 @@ $("hash-form").addEventListener("submit",async event=>{
   const body=JSON.stringify({password:$("hash-password").value});
   clearHash(); $("hash-generate").disabled=true; $("hash-message").textContent="正在生成…";
   try {
-    const response=await fetch("/api/password-hash",{method:"POST",headers:{"Content-Type":"application/json"},body,signal:AbortSignal.timeout(12000)});
+    const response=await fetch("api/password-hash",{method:"POST",headers:{"Content-Type":"application/json"},body,signal:AbortSignal.timeout(12000)});
     if(currentGeneration!==generation)return;
     if(response.status===401){loginScreen();return;}
     const result=await response.json();

@@ -20,6 +20,7 @@ interface DocuMateAPI {
   checkForUpdates: () => Promise<UpdateState>
   startUpdate: () => Promise<UpdateState>
   onUpdateState: (callback: (state: UpdateState) => void) => () => void
+  pickFiles: () => Promise<string[]>
   pickFolder: (options?: {
     title?: string
     buttonLabel?: string

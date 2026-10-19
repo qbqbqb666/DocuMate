@@ -2,8 +2,8 @@
 
 客户端从自己的轻量服务器检查更新，不使用 GitHub 更新源。
 
-- x64：`http://1.14.67.230/documate-updates/windows-x64/`
-- ARM64：`http://1.14.67.230/documate-updates/windows-arm64/`
+- x64：`https://documate.store/documate-updates/windows-x64/`
+- ARM64：`https://documate.store/documate-updates/windows-arm64/`
 - macOS 不使用 Windows 更新源，通过独立的 `mac-version.json` 提示手动更新；浏览器预览和未打包的开发模式不检查更新。
 
 登录（含恢复登录）成功后检查，主界面和新用户引导在检查后才加载。
@@ -49,8 +49,9 @@ ARM64 尚未发布；Windows 安装覆盖、重启和用户数据保留仍需实
 保留旧安装包和 blockmap 供差分下载使用。回滚清单前保留备份，不复用旧版本号发布不同内容。
 GitHub Release 可以归档相同产物，但不影响服务器发布状态。
 
-当前按既有 IP HTTP 方案接入。SHA-512 校验只能检测文件与清单是否一致，
-不能防止 HTTP 清单和文件同时被篡改；正式公开分发应补齐可信 HTTPS 或签名验证。
+新客户端使用 HTTPS 域名更新源；旧客户端的 IP HTTP 更新入口继续保留，
+两个入口读取相同的清单与安装包，不删除旧版安装包或 blockmap。
+SHA-512 校验用于检查文件完整性，HTTPS 用于加密传输并验证服务器身份。
 
 ## 发布前 Windows 实机验收
 

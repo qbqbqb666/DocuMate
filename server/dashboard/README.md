@@ -16,7 +16,8 @@ HTTP 页面复制时使用兼容方式；若浏览器不允许自动复制，则
 
 ## 部署位置
 
-- 网页：`http://1.14.67.230:8081/`
+- 网页：`https://documate.store/dashboard/`
+- 原直连入口保留：`http://1.14.67.230:8081/`
 - 程序及静态页面：`/opt/documate-dashboard/`
 - 看板配置：`/etc/documate-dashboard/dashboard.env`（root 所有，0600）
 - systemd 服务：`/etc/systemd/system/documate-dashboard.service`
@@ -27,7 +28,14 @@ HTTP 页面复制时使用兼容方式；若浏览器不允许自动复制，则
 `documate-dashboard`，以 root 执行 `initialize_server.py`，安装 systemd 单元并启动。
 该初始化脚本遇到已有配置或同名角色会停止，不覆盖现有账号。
 服务器监听 TCP 8081，云服务器防火墙也须放行该端口。PostgreSQL 5432 不需对公网开放。
-目前地址使用 HTTP；提供 HTTPS 时需配套反向代理及启用安全 Cookie。
+HTTPS 入口在 `/etc/nginx/conf.d/documate.store.conf` 中引入
+`/etc/nginx/snippets/documate-dashboard.conf`，内容见本目录 `nginx-location.conf`。
+`proxy_pass` 末尾的 `/` 去掉 `/dashboard/` 前缀；HTML 资源与 JavaScript 接口使用相对路径，
+同时兼容域名子路径和原 IP 直连入口。无尾斜杠的 `/dashboard` 自动跳转到 `/dashboard/`。
+服务仅信任来自 `127.0.0.1` 的代理头，正确识别外部 HTTPS 和访问者 IP；
+HTTPS 登录 Cookie 自动带 Secure，Nginx 将其 Path 限定到 `/dashboard/`，退出时同样清除。
+部署时同时更新静态 HTML、JavaScript 和 systemd 单元，执行 daemon-reload 并重启看板；
+Nginx 配置在 `nginx -t` 通过后 reload。修改前备份现有文件。
 
 ## 查看或修改看板账号、密码
 

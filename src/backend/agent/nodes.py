@@ -66,8 +66,8 @@ def prepare_node(
         raise ValueError(f"工作区不是文件夹：{workspace_path}")
     for accessible in runtime.context.accessible_paths:
         accessible_path = Path(accessible).expanduser().resolve()
-        if not accessible_path.is_dir():
-            raise ValueError(f"可访问文件夹不存在：{accessible_path}")
+        if not (accessible_path.is_dir() or accessible_path.is_file()):
+            raise ValueError(f"可访问资料不存在：{accessible_path}")
 
     prepare = _validate_turn_input(state)
     global_prompt = load_prompt_file(runtime.context.global_prompt_path)

@@ -1,6 +1,6 @@
 # DocuMate 下载页
 
-公开地址：`http://1.14.67.230/documate/`，使用已有 Nginx 80 端口。
+公开地址：`https://documate.store/documate/`，通过 Nginx 443 端口提供 HTTPS；旧版客户端使用的 IP HTTP 入口继续保留。
 
 `index.html` 部署到 `/var/www/documate/index.html`。
 在现有 Nginx server 块内引入 `nginx-location.conf`，保留已有认证、更新和其他站点路由。
@@ -28,7 +28,7 @@ Mac 当前下载文件为 `DocuMate-v0.4.1-mac-arm64-updates.zip`，包含登录
 ## Mac 版本提示
 
 打包后的 Mac 客户端在登录或恢复登录成功后读取
-`http://1.14.67.230/documate/mac-version.json`，与当前应用版本比较。
+`https://documate.store/documate/mac-version.json`，与当前应用版本比较。
 发现更高的正式版本时弹窗；点击“更新”打开下载网页，点击“稍后”继续使用。
 检查失败或 15 秒超时正常进入应用。Mac 不自动下载、安装或删除旧应用。
 

@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('documate', {
     ipcRenderer.on('updates:state', listener)
     return () => ipcRenderer.removeListener('updates:state', listener)
   },
+  pickFiles: () => ipcRenderer.invoke('workspace:pick-files'),
   pickFolder: (options) => ipcRenderer.invoke('workspace:pick-folder', options),
   openFolder: (folderPath) => ipcRenderer.invoke('shell:open-folder', folderPath),
   openFile: (filePath) => ipcRenderer.invoke('shell:open-file', filePath),

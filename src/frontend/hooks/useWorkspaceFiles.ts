@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiRequest } from '../api/client'
+import { ApiError, apiRequest } from '../api/client'
 
 export interface WorkspaceFile {
   id: string
@@ -10,6 +10,7 @@ export interface WorkspaceFile {
   size_bytes: number
   uploaded_at: string
   previewable: boolean
+  missing?: boolean
 }
 
 export interface FilePreview extends WorkspaceFile {
@@ -19,11 +20,17 @@ export interface FilePreview extends WorkspaceFile {
   version: string
 }
 
+export interface FileIndexStatus { path: string; status: 'pending' | 'indexing' | 'ready' | 'error' | 'missing'; error: string | null }
+export interface IndexSummary { files: FileIndexStatus[]; ready: number; pending: number; indexing: number; errors: FileIndexStatus[]; worker_error: string | null }
+
 export function useWorkspaceFiles(workspacePath?: string) {
   const [roots, setRoots] = useState<WorkspaceFile[]>([])
   const [count, setCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [index, setIndex] = useState<IndexSummary | null>(null)
+  const [indexError, setIndexError] = useState<string | null>(null)
   const generation = useRef(0)
   const refresh = useCallback(async () => {
     if (!workspacePath) return
@@ -41,15 +48,40 @@ export function useWorkspaceFiles(workspacePath?: string) {
     }
   }, [workspacePath])
 
+  const refreshIndexStatus = useCallback(async () => {
+    if (!workspacePath) return
+    const current = generation.current
+    try {
+      const status = await apiRequest<IndexSummary>('/api/workspace-files/index-status')
+      if (current === generation.current) { setIndex(status); setIndexError(null) }
+    } catch (reason) {
+      if (current === generation.current) setIndexError(reason instanceof ApiError && reason.status === 404 ? '请重启 DocuMate 以启用资料入库与索引状态。' : reason instanceof Error ? reason.message : String(reason))
+    }
+  }, [workspacePath])
+
+  const refreshAll = useCallback(async () => {
+    if (!workspacePath) return
+    setRefreshing(true)
+    try {
+      await apiRequest('/api/workspace-files/refresh', { method: 'POST' })
+      await Promise.all([refresh(), refreshIndexStatus()])
+      window.dispatchEvent(new Event('documate:files-refreshed'))
+    } finally { setRefreshing(false) }
+  }, [workspacePath, refresh, refreshIndexStatus])
+
   useEffect(() => {
     generation.current += 1
     setRoots([])
     setCount(0)
+    setIndex(null)
+    setIndexError(null)
     setLoading(true)
     void refresh()
+    void refreshIndexStatus()
+    const statusTimer = window.setInterval(() => { if (document.visibilityState === 'visible') void refreshIndexStatus() }, 2000)
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh() }, 5000)
-    return () => { generation.current += 1; window.clearInterval(timer) }
-  }, [refresh])
+    return () => { generation.current += 1; window.clearInterval(timer); window.clearInterval(statusTimer) }
+  }, [refresh, refreshIndexStatus])
 
   const fetchDetail = useCallback(async (path: string, knownVersion?: string): Promise<FilePreview | null> => {
     const params = new URLSearchParams({ path })
@@ -57,5 +89,5 @@ export function useWorkspaceFiles(workspacePath?: string) {
     const result = await apiRequest<FilePreview | { unchanged: true }>(`/api/workspace-files/preview?${params}`)
     return 'unchanged' in result ? null : result
   }, [])
-  return { roots, count, loading, error, refresh, fetchDetail }
+  return { roots, count, loading, error, index, indexError, refreshing, refreshAll, refresh, refreshIndexStatus, fetchDetail }
 }

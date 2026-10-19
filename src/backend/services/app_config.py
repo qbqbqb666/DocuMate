@@ -71,7 +71,7 @@ class AppConfigService:
             self._write(data)
         active_id = data.get("active_project_id")
         return [
-            {**project, "is_active": project["id"] == active_id}
+            {**{key: value for key, value in project.items() if key != "document_sources"}, "is_active": project["id"] == active_id}
             for project in projects
         ]
 
@@ -119,6 +119,58 @@ class AppConfigService:
         data["workspace_path"] = project["primary_path"]
         self._write(data)
         return {**project, "is_active": True}
+
+    def workspace_sources(self, workspace_path: str | None = None) -> list[dict[str, str]]:
+        workspace = workspace_path or self.workspace_info()["path"]
+        self.projects()
+        project = next((p for p in self._read().get("projects", []) if p["primary_path"] == workspace), None)
+        folders = project["folder_paths"] if project else [workspace]
+        return [{"path": path, "kind": "directory"} for path in folders] + (project.get("document_sources", []) if project else [])
+
+    @staticmethod
+    def source_exists(source: dict[str, str]) -> bool:
+        path = Path(source["path"])
+        return (not path.is_symlink() and path.resolve() == path and
+                (path.is_dir() if source["kind"] == "directory" else path.is_file()))
+
+    def index_paths(self) -> list[str]:
+        return [source["path"] for source in self.workspace_sources()
+                if self.source_exists(source) or not Path(source["path"]).exists()]
+
+    def register_documents(self, workspace_path: str, project_id: str | None, sources: list[dict[str, str]]) -> list[dict[str, str]]:
+        from src.backend.services.document_parser import SUPPORTED_SUFFIXES
+        from src.backend.services.workspace import EXCLUDED_SEARCH_DIRECTORIES
+
+        if not sources or len(sources) > 20_000:
+            raise ValueError("请选择 1～20000 个文件或文件夹")
+        validated = []
+        for source in sources:
+            path = Path(source["path"])
+            kind = source["kind"]
+            if (not path.is_absolute() or path.resolve() != path or path.is_symlink()
+                    or any(part.startswith(".") or part in EXCLUDED_SEARCH_DIRECTORIES for part in path.parts[1:])):
+                raise ValueError("请选择普通文件或文件夹，不支持隐藏目录或符号链接")
+            if kind not in {"file", "directory"} or not (path.is_file() if kind == "file" else path.is_dir()):
+                raise ValueError(f"原文件或文件夹不存在：{path}")
+            if kind == "file" and path.suffix.lower() not in SUPPORTED_SUFFIXES:
+                raise ValueError("支持 PDF、DOCX、XLSX、TXT 和 Markdown")
+            validated.append({"path": str(path), "kind": kind})
+        with self._lock:
+            self.projects()
+            data = self._read()
+            project = next((p for p in data["projects"] if p["primary_path"] == workspace_path and
+                            (project_id is None or p["id"] == project_id)), None)
+            if project is None:
+                raise ValueError("项目已切换，请重新打开资料选择窗口")
+            combined = [*project.get("document_sources", []), *validated]
+            unique = {item["path"]: item for item in combined}
+            folders = [Path(p) for p in project["folder_paths"]]
+            added_folders = [Path(item["path"]) for item in unique.values() if item["kind"] == "directory"]
+            project["document_sources"] = [item for item in unique.values()
+                if not any(Path(item["path"]).is_relative_to(root) for root in folders)
+                and not any(Path(item["path"]) != root and Path(item["path"]).is_relative_to(root) for root in added_folders)]
+            self._write(data)
+            return self.workspace_sources(workspace_path)
 
     def settings(self) -> dict[str, Any]:
         data = self._read()
@@ -176,6 +228,10 @@ class AppConfigService:
                 "folder_paths": folders,
                 "primary_path": folders[0],
                 "created_at": str(raw.get("created_at") or datetime.now(timezone.utc).isoformat()),
+                **({"document_sources": [source for source in raw["document_sources"]
+                    if isinstance(source, dict) and source.get("kind") in {"file", "directory"}
+                    and isinstance(source.get("path"), str) and Path(source["path"]).is_absolute()]}
+                   if isinstance(raw.get("document_sources"), list) else {}),
             })
             seen_paths.update(folders)
 

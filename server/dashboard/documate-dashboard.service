@@ -7,7 +7,7 @@ User=documate-dashboard
 Group=documate-dashboard
 WorkingDirectory=/opt/documate-dashboard
 EnvironmentFile=/etc/documate-dashboard/dashboard.env
-ExecStart=/opt/documate-dashboard/.venv/bin/uvicorn app:create_app --factory --host 0.0.0.0 --port 8081 --no-proxy-headers
+ExecStart=/opt/documate-dashboard/.venv/bin/uvicorn app:create_app --factory --host 0.0.0.0 --port 8081 --proxy-headers --forwarded-allow-ips=127.0.0.1
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

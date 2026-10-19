@@ -252,14 +252,17 @@ def test_graph_routes_real_retrieval_and_direct_read_separately(tmp_path, servic
 
 
 @pytest.mark.parametrize("request_retrieval", [True, False])
-def test_production_graph_turn_with_real_retrieval(tmp_path, service, request_retrieval):
+@pytest.mark.parametrize("external_source", [True, False])
+def test_production_graph_turn_with_real_retrieval(tmp_path, service, request_retrieval, external_source):
     from types import SimpleNamespace
     from src.backend.agent.graph import builder
 
     root = tmp_path / "workspace"; root.mkdir()
-    (root / "backup.txt").write_text("Daily database backups protect records after disk failure.")
+    source = tmp_path / "backup.txt" if external_source else root / "backup.txt"
+    source.write_text("Daily database backups protect records after disk failure.")
     graph = builder.compile(checkpointer=InMemorySaver())
-    context = AgentContext(user_id="test", workspace_path=str(root), retrieval_service=service)
+    context = AgentContext(user_id="test", workspace_path=str(root), retrieval_service=service,
+                           accessible_paths=(str(root), str(source)) if external_source else ())
     calls = []
     class FixedChatModel:
         def stream(self, messages, config=None):
@@ -285,7 +288,7 @@ def test_production_graph_turn_with_real_retrieval(tmp_path, service, request_re
     assert nodes[-1] == "finalize"
     if request_retrieval:
         assert len(calls) == 2
-        assert str(root / "backup.txt") in events[-1]["finalize"]["finalization"]["message"]["content"]
+        assert str(source) in events[-1]["finalize"]["finalization"]["message"]["content"]
     else:
         assert not service.database.exists()
 
@@ -304,3 +307,77 @@ def test_legacy_imports_searchable_without_indexing_private_metadata(tmp_path):
         assert result["files"][0]["path"] == str(source)
     finally:
         service.close()
+
+
+def test_selected_file_roots_do_not_include_siblings_and_track_changes(tmp_path, service):
+    root = tmp_path.resolve()
+    selected, sibling = root / "selected.txt", root / "sibling.txt"
+    selected.write_text("Database backups run daily. Recovery copies are verified.", encoding="utf-8")
+    sibling.write_text("Database backups run hourly. This file is not selected.", encoding="utf-8")
+    result = service.search("database backups", [selected])
+    assert [hit["path"] for hit in result["files"]] == [str(selected)]
+    assert result["index"]["ready"] == 1
+    assert service.index_status([selected])["ready"] == 1
+    with sqlite3.connect(service.database) as db:
+        assert db.execute("SELECT path FROM files").fetchall() == [(str(selected),)]
+    selected.write_text("Database backups now run weekly.", encoding="utf-8")
+    assert service.index_status([selected])["pending"] == 1
+    service.synchronize([selected]); service.synchronize([selected])
+    assert service.index_status([selected])["ready"] == 1
+    selected.unlink()
+    assert service.index_status([selected])["errors"][0]["status"] == "missing"
+    service.synchronize([selected])
+    with sqlite3.connect(service.database) as db:
+        assert db.execute("SELECT COUNT(*) FROM chunks").fetchone()[0] == 0
+        assert db.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 0
+    selected.mkdir()
+    (selected / "unexpected.txt").write_text("Do not broaden a registered file to a folder.")
+    service.synchronize([selected])
+    with sqlite3.connect(service.database) as db:
+        assert db.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 0
+    import shutil
+    shutil.rmtree(selected)
+    selected.symlink_to(sibling)
+    service.synchronize([selected])
+    with sqlite3.connect(service.database) as db:
+        assert db.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 0
+    assert sibling.is_file()
+
+
+def test_index_queue_nonblocking_status_and_resume(tmp_path, service):
+    source = tmp_path.resolve() / "queued.txt"
+    source.write_text("Local indexing queue and document retrieval.", encoding="utf-8")
+    service.request_index([source])
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline and service.index_status([source])["ready"] != 1:
+        time.sleep(.05)
+    assert service.index_status([source])["ready"] == 1
+    service.close()
+    restarted = RetrievalService(service.database, service.encoder, debounce_seconds=0)
+    try:
+        assert restarted.index_status([source])["ready"] == 1
+        assert restarted.search("local indexing", [source])["files"][0]["path"] == str(source)
+    finally:
+        restarted.close()
+
+
+def test_index_status_stays_responsive_during_embedding(tmp_path, service):
+    source = tmp_path.resolve() / "slow.txt"
+    source.write_text("Document indexing progress is visible while embedding runs.")
+    entered, release = threading.Event(), threading.Event()
+    original = service.encoder.encode
+    def paused(*args, **kwargs):
+        entered.set()
+        assert release.wait(10)
+        return original(*args, **kwargs)
+    with patch.object(service.encoder, 'encode', side_effect=paused):
+        try:
+            service.request_index([source])
+            assert entered.wait(10)
+            assert service.index_status([source])["indexing"] == 1
+        finally:
+            release.set()
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and service.index_status([source])["ready"] != 1:
+            time.sleep(.05)
+        assert service.index_status([source])["ready"] == 1

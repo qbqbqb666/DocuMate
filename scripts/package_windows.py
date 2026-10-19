@@ -12,6 +12,7 @@ import hashlib
 import io
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import socket
@@ -77,7 +78,7 @@ def patch_arm_popcount(source):
     return source.replace(old, "static unsigned int __builtin_popcountl(u64 x)")
 
 
-def check_pe(filename, arch):
+def pe_machine(filename):
     with Path(filename).open("rb") as stream:
         if stream.read(2) != b"MZ":
             raise RuntimeError(f"不是 Windows 二进制：{filename}")
@@ -87,8 +88,40 @@ def check_pe(filename, arch):
         if stream.read(4) != b"PE\0\0":
             raise RuntimeError(f"无效 PE 文件：{filename}")
         machine = struct.unpack("<H", stream.read(2))[0]
+    return machine
+
+
+def check_pe(filename, arch):
+    machine = pe_machine(filename)
     if machine != MACHINES[arch]:
         raise RuntimeError(f"{filename} 架构不匹配，要求 {arch}，实际 0x{machine:04x}")
+
+
+
+def repair_x64_vc_runtime(backend, runtime_roots):
+    """用已安装 x64 Python/依赖附带的 CRT 替换误收集的 ARM 系统 CRT。"""
+    names = {"msvcp140.dll", "msvcp140_1.dll", "msvcp140_2.dll",
+             "vcruntime140.dll", "vcruntime140_1.dll", "concrt140.dll"}
+    targets = [path for path in Path(backend).rglob("*")
+               if path.is_file() and path.name.lower() in names
+               and pe_machine(path) != MACHINES["x64"]]
+    if not targets:
+        return []
+    candidates = [path for root in runtime_roots for path in Path(root).rglob("*.dll") if path.is_file()]
+    replacements = []
+    # 先确认所有来源，缺少匹配 DLL 时不做部分替换。
+    for target in targets:
+        pattern = re.compile(re.escape(target.stem) + r"(?:-[0-9a-f]{8,64})?\.dll", re.IGNORECASE)
+        source = next((path for path in candidates
+                       if pattern.fullmatch(path.name) and pe_machine(path) == MACHINES["x64"]), None)
+        if source is None:
+            raise RuntimeError(f"缺少经过架构验证的 x64 运行库：{target.name}；保留原架构检查，停止打包")
+        replacements.append((source, target))
+    for source, target in replacements:
+        shutil.copy2(source, target)
+        check_pe(target, "x64")
+        print(f"使用 x64 运行库：{source} -> {target}", flush=True)
+    return replacements
 
 
 def arm_compiler_environment():
@@ -306,6 +339,9 @@ def main():
          "--workpath", ROOT / "build/pyinstaller" / args.arch, spec_path], env=env)
     backend = dist / "documate-backend"
     check_pe(backend / "documate-backend.exe", args.arch)
+    if args.arch == "x64":
+        python_root = Path(run([python, "-I", "-c", "import sys; print(sys.base_prefix)"], capture=True).strip())
+        repair_x64_vc_runtime(backend, [python_root, venv, backend])
     for binary in backend.rglob("*"):
         if binary.suffix.lower() in (".dll", ".pyd"):
             check_pe(binary, args.arch)

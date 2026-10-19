@@ -1,26 +1,105 @@
-"""按需浏览当前项目原文件；不复制文件，也不触发向量计算。"""
+"""浏览和登记当前项目原文件；保留原位置，由后台维护检索索引。"""
 
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from pydantic import BaseModel, Field
 
 from src.backend.api.workspace import get_app_config
 from src.backend.services.app_config import AppConfigService
 from src.backend.services.document_library import MAX_PREVIEW_CHARS, MAX_UPLOAD_BYTES
 from src.backend.services.document_parser import SUPPORTED_SUFFIXES, parse_document
 from src.backend.services.workspace import EXCLUDED_SEARCH_DIRECTORIES
+from src.backend.services.retrieval import RetrievalService, get_retrieval_service
 
 router = APIRouter(prefix="/workspace-files", tags=["workspace-files"])
 
 
 def project_roots(config: AppConfigService) -> list[Path]:
-    workspace = Path(config.workspace_info()["path"])
-    project = next((p for p in config.projects() if p["is_active"] and p["primary_path"] == str(workspace)), None)
-    roots = list(dict.fromkeys(Path(p) for p in (project["folder_paths"] if project else [str(workspace)])))
-    legacy = [root / ".documate" / "documents" for root in roots]
+    sources = config.workspace_sources()
+    roots = list(dict.fromkeys(Path(source["path"]) for source in sources
+        if not Path(source["path"]).exists() or config.source_exists(source)))
+    legacy = [root / ".documate" / "documents" for root in roots if root.is_dir()]
     return roots + [path for path in legacy if path.is_dir() and path.resolve() == path and path not in roots]
+
+
+def get_index(request: Request) -> RetrievalService:
+    return request.app.state.runtime.retrieval or get_retrieval_service()
+
+
+class DocumentSource(BaseModel):
+    path: str
+    kind: Literal["file", "directory"]
+
+
+class RegisterDocuments(BaseModel):
+    workspace_path: str
+    project_id: str | None = None
+    sources: list[DocumentSource] = Field(min_length=1, max_length=20_000)
+
+
+class CandidateRequest(BaseModel):
+    paths: list[str] = Field(min_length=1, max_length=20_000)
+    recursive: bool = False
+
+
+def scan_files(paths: list[Path]) -> set[Path]:
+    files: set[Path] = set()
+    for root in paths:
+        if root.is_file() and visible(root) and root.suffix.lower() in SUPPORTED_SUFFIXES:
+            files.add(root)
+        elif root.is_dir():
+            def fail(error: OSError) -> None:
+                raise error
+            for folder, directories, filenames in os.walk(root, onerror=fail, followlinks=False):
+                directories[:] = [d for d in directories if visible(Path(folder) / d)]
+                files.update(Path(folder) / name for name in filenames
+                    if visible(Path(folder) / name) and Path(name).suffix.lower() in SUPPORTED_SUFFIXES)
+                if len(files) > 20_000:
+                    raise ValueError("资料超过 20000 份，请选择较小的文件夹")
+    return files
+
+
+@router.post("/candidates")
+def candidates(body: CandidateRequest) -> dict:
+    paths = []
+    for value in body.paths:
+        path = Path(value)
+        if (not path.is_absolute() or path.resolve() != path or not path.exists()
+                or any(part.startswith(".") or part in EXCLUDED_SEARCH_DIRECTORIES for part in path.parts[1:])
+                or not visible(path)):
+            raise ValueError("请选择存在的普通文件或文件夹，不支持隐藏目录或符号链接")
+        if body.recursive and not path.is_dir():
+            raise ValueError("请选择文件夹")
+        if not body.recursive and (not path.is_file() or path.suffix.lower() not in SUPPORTED_SUFFIXES):
+            raise ValueError("支持 PDF、DOCX、XLSX、TXT 和 Markdown")
+        paths.append(path)
+    files = scan_files(paths) if body.recursive else set(paths)
+    return {"files": [entry(path) for path in sorted(files)], "total": len(files)}
+
+
+@router.post("/register")
+def register_documents(body: RegisterDocuments, config: AppConfigService = Depends(get_app_config), service: RetrievalService = Depends(get_index)) -> dict:
+    sources = config.register_documents(body.workspace_path, body.project_id, [source.model_dump() for source in body.sources])
+    service.request_index([source["path"] for source in sources if not Path(source["path"]).exists() or config.source_exists(source)])
+    return {"registered": len(body.sources)}
+
+
+@router.post("/refresh")
+def refresh_index(config: AppConfigService = Depends(get_app_config), service: RetrievalService = Depends(get_index)) -> dict:
+    service.request_index(config.index_paths())
+    return {"queued": True}
+
+
+@router.get("/index-status")
+def index_status(config: AppConfigService = Depends(get_app_config), service: RetrievalService = Depends(get_index)) -> dict:
+    paths = project_roots(config)
+    missing = [Path(source["path"]) for source in config.workspace_sources()
+               if not config.source_exists(source)]
+    return service.index_status([*scan_files(paths), *missing])
 
 
 def visible(path: Path) -> bool:
@@ -56,19 +135,19 @@ def entry(path: Path) -> dict:
 @router.get("")
 def roots(config: AppConfigService = Depends(get_app_config)) -> dict:
     paths = project_roots(config)
-    files: set[Path] = set()
-    def fail(error: OSError) -> None:
-        raise error
-    for root in paths:
-        if not root.is_dir():
-            raise FileNotFoundError(f"项目文件夹不存在：{root}")
-        for folder, directories, filenames in os.walk(root, onerror=fail):
-            directories[:] = [d for d in directories if visible(Path(folder) / d)]
-            files.update(Path(folder) / name for name in filenames if visible(Path(folder) / name) and Path(name).suffix.lower() in SUPPORTED_SUFFIXES)
-    entries = [entry(p) for p in paths]
-    for item in entries:
-        if Path(item["id"]).parts[-2:] == (".documate", "documents"):
-            item["filename"] = f"旧版导入资料 · {Path(item['id']).parent.parent.name}"
+    files = scan_files(paths)
+    sources = {source["path"]: source["kind"] for source in config.workspace_sources()}
+    entries = []
+    for path in dict.fromkeys([*paths, *(Path(value) for value in sources)]):
+        if path.exists() and (str(path) not in sources or config.source_exists({"path": str(path), "kind": sources[str(path)]})):
+            item = entry(path)
+        else:
+            item = {"id": str(path), "filename": path.name, "saved_path": str(path),
+                    "kind": sources.get(str(path), "directory"), "doc_type": path.suffix.lstrip("."),
+                    "size_bytes": 0, "uploaded_at": "", "previewable": False, "missing": True}
+        if path.parts[-2:] == (".documate", "documents"):
+            item["filename"] = f"旧版导入资料 · {path.parent.parent.name}"
+        entries.append(item)
     return {"roots": entries, "total_files": len(files)}
 
 

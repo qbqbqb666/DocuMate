@@ -36,6 +36,11 @@ class RetrievalService:
         self.debounce_seconds, self.poll_seconds = debounce_seconds, poll_seconds
         self._lock = threading.RLock()
         self._roots: set[Path] = set()
+        self._file_roots: set[Path] = set()
+        self._requests: set[Path] = set()
+        self._queue_lock = threading.RLock()
+        self._wake = threading.Event()
+        self._last_error: str | None = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._root_provider: Callable[[], list[str]] = lambda: []
@@ -63,30 +68,71 @@ class RetrievalService:
         return db
 
     def start(self, root_provider: Callable[[], list[str]] | None = None) -> None:
-        if root_provider is not None:
-            self._root_provider = root_provider
-        if self._thread is not None and self._thread.is_alive():
-            return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._watch, name="documate-index", daemon=True)
-        self._thread.start()
+        with self._queue_lock:
+            if root_provider is not None:
+                self._root_provider = root_provider
+            if self._thread is not None and self._thread.is_alive():
+                return
+            self._stop.clear()
+            self._thread = threading.Thread(target=self._watch, name="documate-index", daemon=True)
+            self._thread.start()
+
+    def request_index(self, roots: list[str | Path]) -> None:
+        with self._queue_lock:
+            self._requests.update(Path(root).expanduser().absolute() for root in roots)
+        self.start()
+        self._wake.set()
+
+    def index_status(self, paths: list[Path]) -> dict:
+        records = {}
+        if self.database.exists():
+            with sqlite3.connect(self.database) as db:
+                db.row_factory = sqlite3.Row
+                if db.execute("SELECT 1 FROM sqlite_master WHERE name='files'").fetchone():
+                    records = {row["path"]: dict(row) for row in db.execute("SELECT path,status,error,signature FROM files")}
+        files = []
+        for path in sorted(set(paths)):
+            record = records.get(str(path))
+            state, error = "pending", None
+            try:
+                signature = _signature(path)
+                if record and record["signature"] == signature:
+                    state, error = record["status"], record["error"]
+            except (OSError, ValueError):
+                state, error = "missing", "原文件已移除或路径已改变"
+            files.append({"path": str(path), "status": state, "error": error})
+        return {"files": files, "ready": sum(f["status"] == "ready" for f in files),
+                "pending": sum(f["status"] == "pending" for f in files),
+                "indexing": sum(f["status"] == "indexing" for f in files),
+                "errors": [f for f in files if f["status"] in {"error", "missing"}],
+                "worker_error": self._last_error}
 
     def close(self) -> None:
         self._stop.set()
+        self._wake.set()
         if self._thread is not None:
             self._thread.join(timeout=5)
 
     def _watch(self) -> None:
-        while not self._stop.wait(self.poll_seconds):
+        while not self._stop.is_set():
+            self._wake.wait(self.poll_seconds)
+            self._wake.clear()
+            if self._stop.is_set():
+                return
             try:
-                roots = self._root_provider()
+                with self._queue_lock:
+                    requested = list(self._requests)
+                    self._requests.clear()
+                roots = [*self._root_provider(), *requested]
                 with self._lock:
                     registered = list(self._roots)
                 if roots or registered:
                     self.synchronize([*roots, *registered], self._check_running)
+                self._last_error = None
             except RunCancelledError:
                 return
-            except Exception:
+            except Exception as error:
+                self._last_error = str(error)[:500]
                 logger.exception("本地资料索引扫描失败")
 
     def _check_running(self) -> None:
@@ -94,9 +140,10 @@ class RetrievalService:
             raise RunCancelledError("资料索引已停止")
 
     def synchronize(self, roots: list[str | Path], cancel_check: Callable[[], None] = lambda: None) -> None:
-        roots = sorted({Path(root).expanduser().resolve() for root in roots})
+        roots = sorted({Path(root).expanduser().absolute() for root in roots})
         with cancellable_lock(self._lock, cancel_check):
             self._roots.update(roots)
+            self._file_roots.update(root for root in roots if root.is_file() and root.resolve() == root)
             paths: set[Path] = set()
             scan_roots = set(roots)
             for root in roots:
@@ -105,10 +152,14 @@ class RetrievalService:
                     scan_roots.add(legacy)
             for root in sorted(scan_roots):
                 cancel_check()
-                if not root.exists():
+                if not root.exists() or root.is_symlink() or root.resolve() != root:
+                    continue
+                if root in self._file_roots:
+                    if root.is_file() and not root.is_symlink() and root.suffix.lower() in SUPPORTED_SUFFIXES:
+                        paths.add(root)
                     continue
                 if not root.is_dir():
-                    raise ValueError(f"检索范围不是文件夹：{root}")
+                    raise ValueError(f"检索范围不是文件或文件夹：{root}")
                 def walk_error(error: OSError) -> None:
                     raise error
                 for folder, directories, files in os.walk(root, followlinks=False, onerror=walk_error):
@@ -156,6 +207,8 @@ class RetrievalService:
                     elif time.time() - row["changed_at"] < self.debounce_seconds:
                         continue
                     try:
+                        with db:
+                            db.execute("UPDATE files SET status='indexing',error=NULL WHERE path=?", (str(path),))
                         if path.stat().st_size > MAX_FILE_BYTES:
                             raise ValueError("单份资料不能超过 50 MB")
                         content = path.read_bytes()
@@ -173,12 +226,16 @@ class RetrievalService:
                         vectors = self.encoder.encode([block.text for block in blocks], cancel_check=cancel_check)
                         cancel_check()
                         if _signature(path) != signature:
+                            with db:
+                                db.execute("UPDATE files SET status='pending',changed_at=? WHERE path=?", (time.time(), str(path)))
                             continue
                         with db:
                             db.execute("DELETE FROM chunks WHERE path=?", (str(path),))
                             db.executemany("INSERT INTO chunks(path,text,location,embedding) VALUES(?,?,?,?)", [(str(path), block.text, json.dumps(block.location, ensure_ascii=False), vector.tobytes()) for block, vector in zip(blocks, vectors)])
                             db.execute("UPDATE files SET sha256=?,encoder=?,status='ready',error=NULL WHERE path=?", (digest, fingerprint, str(path)))
                     except RunCancelledError:
+                        with db:
+                            db.execute("UPDATE files SET status='pending' WHERE path=?", (str(path),))
                         raise
                     except Exception as error:
                         with db:
@@ -190,7 +247,7 @@ class RetrievalService:
                cancel_check: Callable[[], None] = lambda: None) -> dict:
         if not query.strip() or len(query) > 2000 or not 1 <= top_k <= 20:
             raise ValueError("检索需求须为 1～2000 字符，top_k 须为 1～20")
-        roots = sorted({Path(root).expanduser().resolve() for root in roots})
+        roots = sorted({Path(root).expanduser().absolute() for root in roots})
         if not roots:
             raise ValueError("请指定检索文件夹")
         self.synchronize(roots, cancel_check)
@@ -201,8 +258,12 @@ class RetrievalService:
             db = self._connect()
             try:
                 # 路径范围在距离排序前过滤；基础版采用 sqlite-vec 精确距离计算。
-                conditions = " OR ".join("instr(f.path,?)=1" for _ in roots)
-                parameters = [str(root).rstrip(os.sep) + os.sep for root in roots]
+                conditions = " OR ".join("f.path=?" if root in self._file_roots else "(f.path=? OR instr(f.path,?)=1)" for root in roots)
+                parameters = []
+                for root in roots:
+                    parameters.append(str(root))
+                    if root not in self._file_roots:
+                        parameters.append(str(root).rstrip(os.sep) + os.sep)
                 rows = db.execute(f"SELECT f.path,f.signature,f.sha256,MIN(vec_distance_cosine(c.embedding,?)) distance FROM chunks c JOIN files f ON f.path=c.path WHERE f.status='ready' AND ({conditions}) GROUP BY f.path ORDER BY distance,f.path", [vector, *parameters]).fetchall()
                 hits = []
                 for row in rows:

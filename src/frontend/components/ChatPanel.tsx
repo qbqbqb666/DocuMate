@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useChat, type ChatMessage, type ToolCallView } from '../hooks/useChat'
+import { useChatDraft } from '../hooks/useChatDraft'
 import { useSessions } from '../hooks/useSessions'
 import { apiUrl } from '../api/client'
 import type { ApprovalPayload } from '../api/types'
-import type { WorkspaceFile } from '../hooks/useWorkspaceFiles'
 import { FileReferencePicker } from './FileReferencePicker'
+import { Icon } from './Icon'
 
 interface Props {
   onJumpToDoc?: (docId: string) => void
+  onTitleChange?: (title: string) => void
   workspacePath?: string
   newSessionRequest?: number
   trustAgent?: boolean
@@ -20,27 +22,21 @@ interface Props {
   onSettingsChange?: (patch: { trust_agent?: boolean; provider?: 'siliconflow' | 'deepseek'; model_name?: string }) => void
 }
 
-function formatRelativeTime(iso: string): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return ''
-  const diffMin = Math.floor((Date.now() - d.getTime()) / 60000)
-  if (diffMin < 1) return '刚刚'
-  if (diffMin < 60) return `${diffMin} 分钟前`
-  if (diffMin < 60 * 24) return `${Math.floor(diffMin / 60)} 小时前`
-  return d.toLocaleDateString('zh-CN')
+export function ChatPanel(props: Props) {
+  const identity = JSON.stringify([props.workspacePath, props.projectId, props.requestedThreadId, props.newSessionRequest || 0])
+  return <ConversationPanel key={identity} {...props} />
 }
 
-export function ChatPanel({ onJumpToDoc, workspacePath, projectId, newSessionRequest = 0, trustAgent = false, provider = 'siliconflow', modelName = 'Qwen/Qwen3.5-4B', requestedThreadId = null, models = [], settingsLoading = false, onSettingsChange }: Props) {
+function ConversationPanel({ onJumpToDoc, onTitleChange, workspacePath, projectId, newSessionRequest = 0, trustAgent = false, provider = 'siliconflow', modelName = 'Qwen/Qwen3.5-4B', requestedThreadId = null, models = [], settingsLoading = false, onSettingsChange }: Props) {
   const {
-    messages, loading, threadId, pendingTool, statusMessage, send, cancel, clear,
+    messages, loading, threadId, pendingTool, statusMessage, send, cancel,
     loadThread, startNewThread, submitPermission, configError,
   } = useChat(workspacePath, projectId, trustAgent ? 'full_access' : 'request_approval', provider, modelName)
   const sessions = useSessions(workspacePath, projectId)
-  const [input, setInput] = useState('')
+  const conversationId = requestedThreadId || threadId
+  const { input, setInput, referencedFiles, setReferencedFiles, clearSubmittedDraft } = useChatDraft(workspacePath, projectId, conversationId || `new:${newSessionRequest}`, !conversationId)
+  const historyLoading = Boolean(requestedThreadId && requestedThreadId !== threadId)
   const [showFilePicker, setShowFilePicker] = useState(false)
-  const [referencedFiles, setReferencedFiles] = useState<WorkspaceFile[]>([])
-  const [showSessionMenu, setShowSessionMenu] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const lastNewSessionRequest = useRef(0)
   const submitBusyRef = useRef(false)
@@ -51,15 +47,10 @@ export function ChatPanel({ onJumpToDoc, workspacePath, projectId, newSessionReq
   }, [loadThread, requestedThreadId, threadId])
 
   useEffect(() => {
-    if (!newSessionRequest || newSessionRequest === lastNewSessionRequest.current) return
+    if (requestedThreadId || !newSessionRequest || newSessionRequest === lastNewSessionRequest.current) return
     lastNewSessionRequest.current = newSessionRequest
     void startNewThread()
-  }, [newSessionRequest, startNewThread])
-
-  useEffect(() => {
-    setReferencedFiles([])
-    setShowFilePicker(false)
-  }, [workspacePath, projectId, requestedThreadId, newSessionRequest])
+  }, [newSessionRequest, requestedThreadId, startNewThread])
 
   // 自动滚到底
   useEffect(() => {
@@ -86,17 +77,12 @@ export function ChatPanel({ onJumpToDoc, workspacePath, projectId, newSessionReq
   }, [loading])
 
   const submit = async () => {
-    if (!input.trim() || loading || submitBusyRef.current) return
+    if (!input.trim() || loading || historyLoading || submitBusyRef.current) return
     submitBusyRef.current = true
     const references = referencedFiles.length ? '\n\n本轮引用的本地原文件（JSON 路径列表）：\n' + JSON.stringify(referencedFiles.map(file => file.saved_path), null, 2) + '\n请直接读取这些指定文件，再按上述需求处理；这些路径已明确，无需用向量检索定位。若文件不存在或读取失败，请明确说明，不要猜测文件内容。' : ''
     const text = input.trim() + references
-    const draft = input
-    const referencesToSend = referencedFiles
     try {
-      if (await send(text)) {
-        setInput(current => current === draft ? '' : current)
-        setReferencedFiles(current => current.filter(file => !referencesToSend.some(sent => sent.id === file.id)))
-      }
+      await send(text, clearSubmittedDraft)
     } finally { submitBusyRef.current = false }
   }
 
@@ -110,115 +96,13 @@ export function ChatPanel({ onJumpToDoc, workspacePath, projectId, newSessionReq
     }
   }
 
-  const handleSwitchSession = async (id: string) => {
-    setShowSessionMenu(false)
-    if (id === threadId) return
-    setReferencedFiles([])
-    setShowFilePicker(false)
-    await loadThread(id)
-  }
-
-  const handleNewSession = async () => {
-    setShowSessionMenu(false)
-    setReferencedFiles([])
-    setShowFilePicker(false)
-    await startNewThread()
-  }
-
-  const currentSessionLabel = threadId
-    ? (sessions.threads.find((item) => item.thread_id === threadId)?.preview || `会话 ${threadId.slice(0, 6)}`)
-    : '未开始'
+  useEffect(() => {
+    const activeThread = sessions.threads.find(item => item.thread_id === threadId)
+    if (activeThread) onTitleChange?.(activeThread.title || '新对话')
+  }, [threadId, sessions.threads, onTitleChange])
 
   return (
     <div className="flex flex-col h-full">
-      {/* 顶部：标题 + 会话切换 + clear */}
-      <div className="dm-chat-panel-header relative">
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex-1 min-w-0">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              💬 Agent 对话
-            </div>
-            <div className="text-xs text-slate-400 mt-0.5 truncate" title={currentSessionLabel}>
-              {threadId
-                ? `📑 ${currentSessionLabel}`
-                : 'LLM 自主调用工具读写工作区'}
-            </div>
-          </div>
-          <div className="flex items-center gap-1 ml-2 shrink-0">
-            <button
-              onClick={() => setShowSessionMenu((v) => !v)}
-              className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1 border border-slate-200 rounded hover:bg-slate-50"
-              title="切换会话"
-            >
-              📑 ▾
-            </button>
-            {messages.length > 0 && (
-              <button
-                onClick={clear}
-                className="text-xs text-slate-500 hover:text-slate-700 px-1"
-                title="清空当前对话视图（不删除会话存档）"
-              >
-                清空
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* 会话切换下拉菜单 */}
-        {showSessionMenu && (
-          <>
-            <div
-              className="fixed inset-0 z-30"
-              onClick={() => setShowSessionMenu(false)}
-            />
-            <div className="absolute left-3 right-3 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-40 overflow-hidden">
-              <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-                <span>历史会话 ({sessions.threads.length})</span>
-                <button
-                  onClick={handleNewSession}
-                  className="text-[11px] font-medium text-slate-700 hover:text-slate-900 normal-case tracking-normal"
-                >
-                  ＋ 新会话
-                </button>
-              </div>
-              <div className="max-h-72 overflow-y-auto">
-                {sessions.threads.length === 0 ? (
-                  <div className="px-3 py-3 text-xs text-slate-400 text-center">
-                    暂无历史<br />
-                    <span className="text-[10px]">发送第一条消息会自动创建会话</span>
-                  </div>
-                ) : (
-                  sessions.threads.map((s) => (
-                    <div
-                      key={s.thread_id}
-                      className={`
-                        w-full text-left px-3 py-2 text-xs border-b border-slate-50 transition-colors flex items-start gap-2 cursor-pointer
-                        ${threadId === s.thread_id
-                          ? 'bg-slate-100'
-                          : 'hover:bg-slate-50'}
-                      `}
-                      onClick={() => handleSwitchSession(s.thread_id)}
-                    >
-                      <span className="w-3 text-slate-400 mt-0.5 shrink-0">
-                        {threadId === s.thread_id ? '✓' : ''}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-slate-700 truncate" title={s.preview}>
-                          {s.preview || '(空对话)'}
-                        </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
-                          {s.message_count} 条 · {formatRelativeTime(s.updated_at)}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-
       {/* 消息列表 */}
       <div ref={scrollRef} className="dm-message-list">
         {configError && (
@@ -226,16 +110,6 @@ export function ChatPanel({ onJumpToDoc, workspacePath, projectId, newSessionReq
             ⚠️ {configError}
             <br />
             请前往个人中心，填写当前模型供应商对应的 API Key。
-          </div>
-        )}
-
-        {!configError && messages.length === 0 && (
-          <div className="text-center py-8 px-2 text-xs text-slate-400 leading-relaxed">
-            问点跟你文档相关的问题
-            <br />
-            比如：&quot;这份合同的违约责任写在哪？&quot;
-            <br />
-            &quot;这周报里 Q3 的目标是什么？&quot;
           </div>
         )}
 
@@ -250,38 +124,44 @@ export function ChatPanel({ onJumpToDoc, workspacePath, projectId, newSessionReq
       {/* 输入区 */}
       <div className="dm-chat-composer">
         <div className="dm-chat-controls">
-          <label><span>模型</span><select value={`${provider}|${modelName}`} disabled={settingsLoading} onChange={(event) => { const [nextProvider, nextModel] = event.target.value.split('|') as ['siliconflow' | 'deepseek', string]; onSettingsChange?.({ provider: nextProvider, model_name: nextModel }) }}>{models.map((model) => <option key={`${model.provider}|${model.model_name}`} value={`${model.provider}|${model.model_name}`}>{model.provider === 'deepseek' ? 'DeepSeek' : 'SiliconFlow'} · {model.display_name}</option>)}</select></label>
-          <button type="button" className="dm-file-reference-button" disabled={loading || !workspacePath} onClick={() => setShowFilePicker(true)} title="选择文件区文件">＋ 引用文件</button>
-          <label className="dm-chat-access-control"><span>权限模式</span><select value={trustAgent ? 'full_access' : 'request_approval'} disabled={settingsLoading} onChange={(event) => onSettingsChange?.({ trust_agent: event.target.value === 'full_access' })}><option value="request_approval">请求批准</option><option value="full_access">完全访问</option></select></label>
+          <ComposerSelect className="dm-chat-model-control" label="模型" icon={<Icon name="bot" size={15} />} value={`${provider}|${modelName}`} disabled={settingsLoading} options={models.map(model => ({ value: `${model.provider}|${model.model_name}`, label: `${model.provider === 'deepseek' ? 'DeepSeek' : 'SiliconFlow'} · ${model.display_name}` }))} onChange={value => { const [nextProvider, nextModel] = value.split('|') as ['siliconflow' | 'deepseek', string]; onSettingsChange?.({ provider: nextProvider, model_name: nextModel }) }} />
+          <button type="button" className="dm-file-reference-button" disabled={loading || !workspacePath} onClick={() => setShowFilePicker(true)} title="选择文件区文件"><Icon name="plus" size={15} />引用文件</button>
+          <div className="dm-chat-access-control"><span className="dm-chat-access-caption">权限模式</span><ComposerSelect className="dm-chat-access-field" label="权限模式" icon={<Icon name={trustAgent ? 'check' : 'clock'} size={14} />} value={trustAgent ? 'full_access' : 'request_approval'} disabled={settingsLoading} options={[{ value: 'request_approval', label: '请求批准' }, { value: 'full_access', label: '完全访问' }]} onChange={value => onSettingsChange?.({ trust_agent: value === 'full_access' })} /></div>
         </div>
         {referencedFiles.length > 0 && <div className="max-w-3xl mx-auto mb-2 flex flex-wrap items-center gap-2">
-          {referencedFiles.map(file => <button type="button" key={file.id} disabled={loading} title={file.saved_path} aria-label={`移除引用 ${file.filename}`} className="text-xs bg-blue-50 text-blue-800 rounded px-2 py-1" onClick={() => setReferencedFiles(current => current.filter(item => item.id !== file.id))}>{file.filename} ×</button>)}
+          {referencedFiles.map(file => <button type="button" key={file.id} disabled={loading} title={file.saved_path} aria-label={`移除引用 ${file.filename}`} className="dm-reference-chip" data-file-type={file.filename.split('.').at(-1)?.toLowerCase()} onClick={() => setReferencedFiles(current => current.filter(item => item.id !== file.id))}>{file.filename} ×</button>)}
         </div>}
-        <div className="flex gap-2 max-w-3xl mx-auto">
+        <div className="dm-chat-composer-row">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onCompositionStart={() => { isComposingRef.current = true }}
             onCompositionEnd={() => { isComposingRef.current = false }}
             onKeyDown={onKey}
-            placeholder="问点什么... (Enter 发送，Shift+Enter 换行)"
+            placeholder="输入消息…（Enter 发送，Shift+Enter 换行）"
             rows={2}
             className="dm-chat-textarea"
           />
           {loading ? (
             <button
+              type="button"
               onClick={cancel}
               className="dm-chat-stop"
+              aria-label="停止生成"
+              title="停止生成"
             >
-              停
+              <Icon name="stop" size={18} />
             </button>
           ) : (
             <button
+              type="button"
               onClick={submit}
-              disabled={!input.trim()}
+              aria-label="发送消息"
+              title="发送消息"
+              disabled={!input.trim() || historyLoading}
               className="dm-chat-send"
             >
-              发送
+              <Icon name="send" size={18} />
             </button>
           )}
         </div>
@@ -296,6 +176,69 @@ export function ChatPanel({ onJumpToDoc, workspacePath, projectId, newSessionReq
           onDecide={submitPermission}
         />
       )}
+    </div>
+  )
+}
+
+
+function ComposerSelect({ className, label, icon, value, disabled, options, onChange }: {
+  className: string
+  label: string
+  icon: ReactNode
+  value: string
+  disabled: boolean
+  options: Array<{ value: string; label: string }>
+  onChange: (value: string) => void
+}) {
+  const id = useId()
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(0)
+  const root = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+  const selected = options.findIndex(option => option.value === value)
+  const expanded = open && !disabled && options.length > 0
+
+  useEffect(() => {
+    if (!expanded) return
+    const closeOutside = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    return () => document.removeEventListener('pointerdown', closeOutside)
+  }, [expanded])
+
+  useEffect(() => {
+    if (expanded) document.getElementById(`${id}-${active}`)?.scrollIntoView({ block: 'nearest' })
+  }, [expanded, active, id])
+
+  const choose = (index: number) => {
+    if (options[index] && options[index].value !== value) onChange(options[index].value)
+    setOpen(false)
+    trigger.current?.focus()
+  }
+
+  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'Escape') { event.preventDefault(); setOpen(false); return }
+    if (event.key === 'Tab') { setOpen(false); return }
+    if (!options.length) return
+    if (event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'Home' || event.key === 'End') {
+      event.preventDefault()
+      if (!expanded) { setActive(Math.max(0, selected)); setOpen(true); return }
+      setActive(current => event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : (current + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length)
+    } else if (expanded && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault()
+      choose(active)
+    }
+  }
+
+  return (
+    <div ref={root} className={`dm-composer-select ${className}`} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false) }}>
+      <button ref={trigger} type="button" className="dm-composer-select-trigger" role="combobox" aria-label={label} aria-haspopup="listbox" aria-expanded={expanded} aria-controls={expanded ? id : undefined} aria-activedescendant={expanded ? `${id}-${active}` : undefined} disabled={disabled || !options.length} onKeyDown={onKeyDown} onClick={() => { setActive(Math.max(0, selected)); setOpen(!expanded) }}>
+        {icon}<span className="dm-composer-select-value">{options[selected]?.label || value}</span><span className={`dm-composer-select-arrow${expanded ? ' is-open' : ''}`}><Icon name="chevron" size={12} /></span>
+      </button>
+      {expanded && <div id={id} role="listbox" aria-label={label} className="dm-composer-select-menu">
+        {options.map((option, index) => <div key={option.value} id={`${id}-${index}`} role="option" aria-selected={option.value === value} className={`dm-composer-select-option${active === index ? ' is-active' : ''}`} onPointerMove={() => setActive(index)} onMouseDown={event => event.preventDefault()} onClick={() => choose(index)}><span>{option.label}</span><span className="dm-composer-select-check">{option.value === value && <Icon name="check" size={15} />}</span></div>)}
+      </div>}
     </div>
   )
 }
