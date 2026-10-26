@@ -21,7 +21,7 @@
 import {
   createContext, useContext, useEffect, useState, ReactNode, useCallback,
 } from 'react'
-import { AuthAPI, AuthError, type UserInfo, type EmailCredentials, type EmailPasswordCredentials } from './AuthClient'
+import { AuthAPI, AuthError, type UserInfo, type AuthResponse, type EmailCredentials, type EmailPasswordCredentials } from './AuthClient'
 
 // 本地 Python backend 地址 (Electron 拉起的 FastAPI)
 // 不通过 import.meta.env 配, 因为 backend 端口在 Electron 启动时定死 8765
@@ -98,6 +98,21 @@ function isRemembered(): boolean {
 }
 
 
+let restoringSession: Promise<AuthResponse | null> | null = null
+
+function restoreSession(): Promise<AuthResponse | null> {
+  if (!restoringSession) {
+    restoringSession = (async () => {
+      const stored = await loadStoredRefresh()
+      if (!stored) return null
+      const auth = await AuthAPI.refresh(stored)
+      await saveRefresh(auth.refresh_token, isRemembered())
+      return auth
+    })().finally(() => { restoringSession = null })
+  }
+  return restoringSession
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -105,24 +120,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     status: 'loading',
   })
 
-  // App 启动时: 尝试用 refresh_token 自动登录
+  // StrictMode remounts share one refresh so a rotating token is not used twice.
   useEffect(() => {
-    void (async () => {
-      const stored = await loadStoredRefresh()
-      if (!stored) {
-        setState({ user: null, accessToken: null, status: 'unauthenticated' })
-        return
-      }
-      try {
-        const auth = await AuthAPI.refresh(stored)
-        await saveRefresh(auth.refresh_token, isRemembered())
-        setState({ user: auth.user, accessToken: auth.access_token, status: 'authenticated' })
-      } catch (e) {
-        console.warn('[auth] auto-refresh failed:', e)
-        await clearRefresh()
-        setState({ user: null, accessToken: null, status: 'unauthenticated' })
-      }
-    })()
+    let active = true
+    void restoreSession().then(auth => {
+      if (active) setState(auth
+        ? { user: auth.user, accessToken: auth.access_token, status: 'authenticated' }
+        : { user: null, accessToken: null, status: 'unauthenticated' })
+    }).catch(async reason => {
+      if (!active) return
+      const invalid = reason instanceof AuthError && (reason.status === 401 || reason.status === 403)
+      if (invalid) await clearRefresh().catch(() => undefined)
+      if (active) setState(current => !invalid && current.status === 'authenticated'
+        ? current : { user: null, accessToken: null, status: 'unauthenticated' })
+    })
+    return () => { active = false }
   }, [])
 
   // token 变化时主动推送给本地 Python backend，供本机 API Key 接口验证会话。

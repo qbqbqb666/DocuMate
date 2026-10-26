@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { AuthAPI, AuthError, type EmailCredentials } from './AuthClient'
 import type { RobotMood } from './AuthHero'
+import { PasswordInput } from './PasswordInput'
 
 interface Props {
   purpose: 'register' | 'reset'
@@ -68,7 +69,7 @@ export function EmailVerificationForm({ purpose, onSubmit, onPasswordFocus }: Pr
   }
 
   const passwordField = <label><span>{purpose === 'reset' ? '新密码' : '密码'}</span>
-    <input type="password" minLength={6} maxLength={128} required value={password} disabled={busy !== null}
+    <PasswordInput minLength={6} maxLength={128} required value={password} disabled={busy !== null}
       autoComplete="new-password" placeholder="至少6位"
       onFocus={() => onPasswordFocus?.('peek')} onBlur={() => onPasswordFocus?.('idle')}
       onChange={event => setPassword(event.target.value)} /></label>
@@ -84,7 +85,7 @@ export function EmailVerificationForm({ purpose, onSubmit, onPasswordFocus }: Pr
         setEmail(event.target.value); setVerification(null); setCode(''); setMessage(''); setError('')
       }} /></label>
     {codeField}{passwordField}
-      <label>确认密码<input type="password" autoComplete="new-password" maxLength={128} required value={confirm}
+      <label>确认密码<PasswordInput autoComplete="new-password" maxLength={128} required value={confirm}
         placeholder="再输入一次密码" disabled={busy !== null} onChange={event => setConfirm(event.target.value)}
         onFocus={() => onPasswordFocus?.('peek')} onBlur={() => onPasswordFocus?.('idle')} /></label>
     {ready === false && <div className="auth-error">邮箱认证服务尚未配置完成。</div>}

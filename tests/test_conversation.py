@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
-from langchain_core.messages import AIMessage, AIMessageChunk
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from langgraph.types import Command, Interrupt
 
 from src.backend.services.conversation import (
@@ -15,10 +15,11 @@ from src.backend.services.conversation import (
     ImageInput,
     ModelChunkEvent,
     StatusStreamEvent,
+    ToolStreamEvent,
     TurnResultStreamEvent,
     _turn_execution_summary,
 )
-from src.backend.agent.context import ModelProvider
+from src.backend.agent.context import AgentContext, ModelProvider
 from src.backend.services.event_log import EventLogService
 from src.backend.services.history import HistoryService
 from src.backend.services.state_rebuilder import rebuild_state_from_event_log
@@ -408,6 +409,44 @@ class ConversationCoordinatorTest(unittest.TestCase):
             summary["approvals"],
             {"requested": 1, "allowed": 0, "denied": 1},
         )
+
+    def test_stream_graph_keeps_tool_results_and_summaries_out_of_model_chunks(self) -> None:
+        class MixedGraph:
+            closed = False
+
+            def stream(inner, *args, **kwargs):
+                try:
+                    yield "messages", (ToolMessage(content='{"data":"private-tool-result"}', tool_call_id="read-1"), {"langgraph_node": "tools"})
+                    yield "messages", (ToolMessage(content="misrouted-tool", tool_call_id="read-2"), {"langgraph_node": "model"})
+                    yield "messages", (AIMessageChunk(content="internal-summary"), {"langgraph_node": "summarize"})
+                    yield "messages", (HumanMessage(content="user-input"), {"langgraph_node": "model"})
+                    yield "messages", (AIMessageChunk(id="answer", content="真实回答"), {"langgraph_node": "model"})
+                    yield "custom", {"type": "tool", "tool_call_id": "read-1", "name": "read_text_file", "args": {"relative_path": "report.md"}, "status": "success", "result": {"ok": True, "data": {"content": "private-tool-result"}}}
+                finally:
+                    inner.closed = True
+
+        graph = MixedGraph()
+        coordinator = ConversationCoordinator(graph=graph, history_service=self.history, event_log_service=self.event_log)
+        context = AgentContext(user_id="user-1", workspace_path=str(self.workspace))
+        events = list(coordinator._stream_graph({}, {}, context))
+        self.assertEqual([event.chunk.content for event in events if isinstance(event, ModelChunkEvent)], ["真实回答"])
+        self.assertIsInstance(events[-1], ToolStreamEvent)
+        self.assertEqual(events[-1].result["data"]["content"], "private-tool-result")
+        self.assertTrue(graph.closed)
+
+    def test_cancelled_stream_does_not_emit_a_tool_success(self) -> None:
+        class ToolGraph:
+            def stream(inner, *args, **kwargs):
+                yield "custom", {"type": "tool", "tool_call_id": "write-1", "name": "write_text_file", "args": {}, "status": "running"}
+                yield "custom", {"type": "tool", "tool_call_id": "write-1", "name": "write_text_file", "args": {}, "status": "success"}
+
+        coordinator = ConversationCoordinator(graph=ToolGraph(), history_service=self.history, event_log_service=self.event_log)
+        context = AgentContext(user_id="user-1", workspace_path=str(self.workspace))
+        stream = coordinator._stream_graph({}, {}, context)
+        self.assertEqual(next(stream).status, "running")
+        context.cancellation.cancel()
+        with self.assertRaises(RunCancelledError):
+            next(stream)
 
     def test_streams_status_model_chunks_and_final_result_without_persisting_chunks(self) -> None:
         graph = StreamingFakeGraph()

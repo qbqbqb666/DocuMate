@@ -563,6 +563,7 @@ def _execute_tool_plan(
             if recorder:
                 message = recorder.message_created(message)
             normalized_messages.append(message)
+            _write_tool_event(runtime, call, "denied", message)
             continue
         if decision != "execute":
             raise ValueError(f"无效的工具执行决策：{decision}")
@@ -578,6 +579,7 @@ def _execute_tool_plan(
             tool_call_id=call["id"],
             tool_name=call["name"],
         )
+        _write_tool_event(runtime, call, "running")
         handle = recorder.tool_started(
             tool_call_id=call["id"],
             name=call["name"],
@@ -606,6 +608,7 @@ def _execute_tool_plan(
             if recorder:
                 message = recorder.message_created(message)
             normalized_messages.append(message)
+            _write_tool_event(runtime, call, "error", message)
             continue
         messages: list[ToolMessage] = result.get("messages", [])
         if len(messages) != 1:
@@ -644,6 +647,9 @@ def _execute_tool_plan(
         if recorder:
             message = recorder.message_created(message)
         normalized_messages.append(message)
+        _write_tool_event(
+            runtime, call, "error" if message.status == "error" else "success", message
+        )
 
         produced_artifacts = (
             _artifacts_from_tool_result(call, parsed_result)
@@ -672,6 +678,22 @@ def _execute_tool_plan(
     if artifacts:
         output["artifacts"] = artifacts
     return output
+
+
+def _write_tool_event(
+    runtime: Runtime[AgentContext],
+    call: dict[str, Any],
+    status: Literal["running", "success", "error", "denied"],
+    message: ToolMessage | None = None,
+) -> None:
+    runtime.stream_writer({
+        "type": "tool",
+        "tool_call_id": call["id"],
+        "name": call["name"],
+        "args": call["args"],
+        "status": status,
+        "result": _parse_tool_result(message.content) if message else None,
+    })
 
 
 def _tool_result_message(

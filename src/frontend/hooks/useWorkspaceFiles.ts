@@ -10,6 +10,7 @@ export interface WorkspaceFile {
   size_bytes: number
   uploaded_at: string
   previewable: boolean
+  group_path?: string
   missing?: boolean
 }
 
@@ -59,6 +60,13 @@ export function useWorkspaceFiles(workspacePath?: string) {
     }
   }, [workspacePath])
 
+  const remove = useCallback(async (path: string | string[], projectId?: string) => {
+    if (!workspacePath) return
+    await apiRequest('/api/workspace-files/remove', { method: 'POST', body: JSON.stringify({ workspace_path: workspacePath, project_id: projectId, paths: Array.isArray(path) ? path : [path] }) })
+    await Promise.all([refresh(), refreshIndexStatus()])
+    window.dispatchEvent(new Event('documate:files-refreshed'))
+  }, [workspacePath, refresh, refreshIndexStatus])
+
   const refreshAll = useCallback(async () => {
     if (!workspacePath) return
     setRefreshing(true)
@@ -89,5 +97,5 @@ export function useWorkspaceFiles(workspacePath?: string) {
     const result = await apiRequest<FilePreview | { unchanged: true }>(`/api/workspace-files/preview?${params}`)
     return 'unchanged' in result ? null : result
   }, [])
-  return { roots, count, loading, error, index, indexError, refreshing, refreshAll, refresh, refreshIndexStatus, fetchDetail }
+  return { roots, count, loading, error, index, indexError, refreshing, refreshAll, remove, refresh, refreshIndexStatus, fetchDetail }
 }

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useWorkspaceFiles, type FilePreview } from './hooks/useWorkspaceFiles'
+import { useEffect, useRef, useState } from 'react'
+import { useWorkspaceFiles, type FilePreview, type WorkspaceFile } from './hooks/useWorkspaceFiles'
 import { useWorkspace } from './hooks/useWorkspace'
 import { useSettings } from './hooks/useSettings'
 import { useProjects } from './hooks/useProjects'
@@ -17,14 +17,21 @@ import { Icon } from './components/Icon'
 import { AuthProvider, useAuth } from './auth/useAuth'
 import { AuthGuard } from './auth/AuthGuard'
 import { AuthAPI, type ApiKeyStatus } from './auth/AuthClient'
-import { apiRequest } from './api/client'
+import { ApiError, apiRequest } from './api/client'
 import type { ProjectSummary } from './api/types'
 
 type AppArea = 'files' | 'workspace'
+type RemovalRequest = {
+  title: string
+  description: string
+  items: Array<{ name: string; path?: string }>
+  run: () => Promise<void>
+  resolve: (confirmed: boolean) => void
+}
 
 function App() {
   const workspace = useWorkspace()
-  const { roots, count, loading, error, index, indexError, refreshing, refreshAll, refreshIndexStatus, fetchDetail, refresh: refreshDocs } = useWorkspaceFiles(workspace.info?.path)
+  const { roots, count, loading, error, index, indexError, refreshing, refreshAll, refreshIndexStatus, fetchDetail, refresh: refreshDocs, remove: removeDocument } = useWorkspaceFiles(workspace.info?.path)
   const settings = useSettings()
   const projects = useProjects()
   const stats = useStats(workspace.info?.path)
@@ -48,10 +55,46 @@ function App() {
     { provider: 'deepseek', configured: false, last4: null },
   ])
   const [agentName, setAgentName] = useState('新对话')
-  const [newSessionRequest, setNewSessionRequest] = useState(0)
+  const newSessionRequest = 0
   const [requestedThreadId, setRequestedThreadId] = useState<string | null>(null)
   const [showNewConversation, setShowNewConversation] = useState(false)
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
+  const [documentHandoff, setDocumentHandoff] = useState<{ threadId: string; file: WorkspaceFile } | null>(null)
+  const [enteringDocument, setEnteringDocument] = useState(false)
+  const [removal, setRemoval] = useState<RemovalRequest | null>(null)
+  const [removalBusy, setRemovalBusy] = useState(false)
+  const [removalError, setRemovalError] = useState<string | null>(null)
+  const removalRef = useRef<RemovalRequest | null>(null)
+  const removalRunning = useRef(false)
+
+  useEffect(() => () => { removalRef.current?.resolve(false) }, [])
+  const requestRemoval = (options: Omit<RemovalRequest, 'resolve'>) => {
+    if (removalRef.current) return Promise.resolve(false)
+    return new Promise<boolean>(resolve => {
+      const request = { ...options, resolve }
+      removalRef.current = request
+      setRemovalError(null)
+      setRemoval(request)
+    })
+  }
+  const dismissRemoval = (confirmed = false) => {
+    const request = removalRef.current
+    removalRef.current = null
+    setRemoval(null)
+    request?.resolve(confirmed)
+  }
+  const confirmRemoval = async () => {
+    const request = removalRef.current
+    if (!request || removalRunning.current) return
+    removalRunning.current = true
+    setRemovalBusy(true); setRemovalError(null)
+    try { await request.run(); dismissRemoval(true) }
+    catch (reason) {
+      setRemovalError(reason instanceof ApiError && reason.status === 404
+        ? '当前后台未提供移除接口。请完整退出并重新启动 DocuMate 后重试；本次未移除资料。'
+        : reason instanceof Error ? reason.message : String(reason))
+    } finally { removalRunning.current = false; setRemovalBusy(false) }
+  }
 
   useEffect(() => {
     refreshDocs()
@@ -112,18 +155,46 @@ function App() {
     setSelectedId(docId)
   }
 
-  const openAgent = (name: string, newSession = false) => {
-    setAgentName(name)
-    setArea('workspace')
-    if (newSession) {
-      setRequestedThreadId(null)
-      setNewSessionRequest((value) => value + 1)
-    }
+  const removeFile = async (path: string, name: string) => {
+    await requestRemoval({ title: '移除此资料？', description: '从当前项目移除并清理不再使用的索引，本地原文件保留。', items: [{ name, path }], run: async () => {
+      await removeDocument(path, activeProjectId || undefined)
+      const normalized = selectedId?.replaceAll('\\', '/')
+      const target = path.replaceAll('\\', '/').replace(/\/$/, '')
+      if (normalized === target || normalized?.startsWith(`${target}/`)) setSelectedId(null)
+      notify('资料已从当前项目移除')
+    } })
+  }
+
+  const removeFiles = (paths: string[]) => {
+    if (!paths.length) return Promise.resolve(false)
+    return requestRemoval({ title: `移除选中的 ${paths.length} 项资料？`, description: '包含所选文件夹中的资料；本地原文件保留。', items: paths.map(path => ({ name: path.replaceAll('\\', '/').split('/').at(-1) || path, path })), run: async () => {
+      await removeDocument(paths, activeProjectId || undefined)
+      if (selectedId && paths.some(path => selectedId === path || selectedId.replaceAll('\\', '/').startsWith(`${path.replaceAll('\\', '/').replace(/\/$/, '')}/`))) setSelectedId(null)
+      notify(`已移除 ${paths.length} 项资料`)
+    } })
+  }
+
+  const removeProject = async (project: ProjectSummary) => {
+    await requestRemoval({ title: '移除此项目？', description: '仅从 DocuMate 移除，保留本地原文件和已有对话。', items: [{ name: project.name, path: project.primary_path }], run: async () => {
+      const remaining = await projects.remove(project.id)
+      if (activeProjectId === project.id) {
+        const next = remaining.find(item => item.is_active) || remaining[0]
+        setActiveProjectId(next?.id || null)
+        setRequestedThreadId(null)
+        setDocumentHandoff(null)
+        setAgentName('新对话')
+        setSelectedId(null)
+        setShowNewConversation(true)
+        await workspace.refresh()
+        await refreshDocs()
+      }
+      notify('项目已移除，原文件和对话保留')
+    } })
   }
 
   const openThread = async (project: ProjectSummary, threadId: string, title: string) => {
     await projects.activate(project.id)
-    if (workspace.info?.path !== project.primary_path) await workspace.switchTo(project.primary_path)
+    if (workspace.info?.path !== project.primary_path && !await workspace.switchTo(project.primary_path)) throw new Error('无法切换到该项目文件夹')
     setActiveProjectId(project.id)
     setAgentName(title || '新对话')
     setRequestedThreadId(threadId)
@@ -133,7 +204,7 @@ function App() {
 
   const createThreadForProject = async (project: ProjectSummary) => {
     await projects.activate(project.id)
-    if (workspace.info?.path !== project.primary_path) await workspace.switchTo(project.primary_path)
+    if (workspace.info?.path !== project.primary_path && !await workspace.switchTo(project.primary_path)) throw new Error('无法切换到该项目文件夹')
     const result = await apiRequest<{ thread_id: string }>('/api/threads', {
       method: 'POST',
       body: JSON.stringify({ workspace_path: project.primary_path, project_id: project.id }),
@@ -144,6 +215,19 @@ function App() {
     setArea('workspace')
     setShowNewConversation(false)
     window.dispatchEvent(new Event('documate:threads-changed'))
+    return result.thread_id
+  }
+
+  const enterDocumentWorkspace = async (doc: FilePreview) => {
+    if (enteringDocument) return
+    setEnteringDocument(true)
+    try {
+      const result = await apiRequest<{ project: ProjectSummary; file: WorkspaceFile; index: { status: string; error: string | null } }>('/api/workspace-files/enter-workspace', { method: 'POST', body: JSON.stringify({ paths: [doc.saved_path] }) })
+      const threadId = await createThreadForProject(result.project)
+      setDocumentHandoff({ threadId, file: result.file })
+      notify(result.index.status === 'ready' ? '已进入对应项目并引用此文件' : result.index.status === 'error' ? `已引用文件；索引失败：${result.index.error || '请稍后重试'}` : '已引用文件，正在建立本地索引')
+    } catch (reason) { notify(reason instanceof Error ? reason.message : String(reason)) }
+    finally { setEnteringDocument(false) }
   }
 
   const refreshApiKeyStatuses = async () => {
@@ -218,9 +302,9 @@ function App() {
 
           <div className="dm-sidebar-content">
             {area === 'files' ? (
-              <DocumentSidebar roots={roots} selectedId={selectedId} onSelect={setSelectedId} loading={loading} refreshing={refreshing} index={index} indexError={indexError} onAdd={() => setShowAddDocuments(true)} onRefresh={() => { void refreshAll().catch(reason => notify(reason instanceof Error ? reason.message : String(reason))) }} />
+              <DocumentSidebar key={activeProject?.id || workspace.info.path} onRemoveMany={removeFiles} roots={roots} selectedId={selectedId} onSelect={setSelectedId} loading={loading} refreshing={refreshing} index={index} indexError={indexError} projectName={activeProject?.name} onRemove={(path, name) => void removeFile(path, name)} onAdd={() => setShowAddDocuments(true)} onRefresh={() => { void refreshAll().catch(reason => notify(reason instanceof Error ? reason.message : String(reason))) }} />
             ) : (
-              <ProjectSidebar projects={projects.projects} activeThreadId={requestedThreadId} resetKey={showNewConversation ? 'new-conversation' : requestedThreadId || 'none'} onOpenThread={(project, threadId, title) => void openThread(project, threadId, title)} onNewThread={(project) => void createThreadForProject(project)} onDeleteThread={(threadId) => { if (threadId === requestedThreadId) { setRequestedThreadId(null); setAgentName('新对话') } }} />
+              <ProjectSidebar onDeleteProject={project => void removeProject(project)} projects={projects.projects} activeThreadId={requestedThreadId} resetKey={showNewConversation ? 'new-conversation' : requestedThreadId || 'none'} onOpenThread={(project, threadId, title) => void openThread(project, threadId, title)} onNewThread={(project) => void createThreadForProject(project)} onDeleteThread={(threadId) => { if (threadId === requestedThreadId) { setRequestedThreadId(null); setAgentName('新对话') } }} />
             )}
           </div>
 
@@ -231,14 +315,15 @@ function App() {
         </aside>
 
         <main className="dm-main">
-          {showNewConversation ? <NewConversationPage projects={projects.projects} projectsLoading={projects.loading} projectsError={projects.error} onUseProject={createThreadForProject} onCancel={() => setShowNewConversation(false)} onCreateProject={async (name, folders) => { const project = await projects.create(name, folders); await createThreadForProject(project) }} /> : area === 'files' ? (
-            selectedId && detailLoading ? <LoadingWorkspace /> : selectedId && detail ? <DocumentViewer doc={detail} onChat={() => openAgent(`${detail.filename} Agent`, true)} /> : <FileEmptyState count={count} error={detailError} />
+          {showNewConversation ? <NewConversationPage projects={projects.projects} projectsLoading={projects.loading} projectsError={projects.error} onUseProject={async project => { await createThreadForProject(project) }} onCancel={() => setShowNewConversation(false)} onCreateProject={async (name, folders) => { const project = await projects.create(name, folders); await createThreadForProject(project) }} /> : area === 'files' ? (
+            selectedId && detailLoading ? <LoadingWorkspace /> : selectedId && detail ? <DocumentViewer doc={detail} opening={enteringDocument} onChat={() => void enterDocumentWorkspace(detail)} /> : <FileEmptyState count={count} error={detailError} />
           ) : (
-            <WorkspaceView workspacePath={activeProject?.primary_path || workspace.info.path} projectId={activeProject?.id} onTitleChange={setAgentName} newSessionRequest={newSessionRequest} requestedThreadId={requestedThreadId} trustAgent={settings.settings.trust_agent} provider={settings.settings.provider} modelName={settings.settings.model_name} models={settings.models} settingsLoading={settings.loading} onSettingsChange={(patch) => void settings.update(patch)} onJumpToDoc={handleJumpToDoc} />
+            <WorkspaceView onReferenceApplied={() => setDocumentHandoff(null)} initialReference={documentHandoff?.threadId === requestedThreadId ? documentHandoff.file : undefined} workspacePath={activeProject?.primary_path || workspace.info.path} projectId={activeProject?.id} onTitleChange={setAgentName} newSessionRequest={newSessionRequest} requestedThreadId={requestedThreadId} trustAgent={settings.settings.trust_agent} provider={settings.settings.provider} modelName={settings.settings.model_name} models={settings.models} settingsLoading={settings.loading} onSettingsChange={(patch) => void settings.update(patch)} onJumpToDoc={handleJumpToDoc} />
           )}
         </main>
       </div>
 
+      {removal && <RemovalDialog request={removal} busy={removalBusy} error={removalError} onCancel={() => dismissRemoval(false)} onConfirm={() => void confirmRemoval()} />}
       {showAddDocuments && workspace.info && <AddDocumentsDialog key={workspace.info.path} workspacePath={workspace.info.path} projectId={activeProjectId || undefined} onClose={() => setShowAddDocuments(false)} onAdded={() => { setShowAddDocuments(false); void refreshDocs(); void refreshIndexStatus(); window.dispatchEvent(new Event('documate:files-refreshed')); notify('资料已加入，正在建立本地索引') }} />}
       {showSearch && <div className="dm-search-overlay"><button className="dm-scrim" aria-label="关闭搜索" onClick={() => setShowSearch(false)} /><section className="dm-search-sheet"><div className="dm-sheet-title"><div><Icon name="search" size={19} />搜索资料</div><button className="dm-icon-button" onClick={() => setShowSearch(false)}><Icon name="close" /></button></div><SearchPanel onJumpToDoc={handleJumpToDoc} /></section></div>}
       {showApiKeyDialog && <ApiKeyDialog value={apiKeyInput} provider={apiProvider} error={apiKeyError} saving={apiKeySaving} onChange={setApiKeyInput} onCancel={() => setShowApiKeyDialog(false)} onSave={() => void saveApiKey()} />}
@@ -254,13 +339,42 @@ function FileEmptyState({ count, error }: { count: number; error: string | null 
   return <section className="dm-empty-state"><div className="dm-empty-mark"><Icon name="folder" size={35} /></div><h1>{error ? '无法预览此文件' : count ? '选择一份资料继续阅读' : '浏览你的工作区文件'}</h1><p>{error || (count ? `当前项目有 ${count.toLocaleString()} 份可解析资料，展开左侧目录选择原文件。` : '将资料保存到当前项目文件夹，文件区会自动更新。')}</p><div className="dm-empty-note">直接使用本地原文件 · 支持 PDF / DOCX / XLSX / TXT / Markdown</div></section>
 }
 
-function WorkspaceView({ workspacePath, projectId, onTitleChange, newSessionRequest, requestedThreadId, trustAgent, provider, modelName, models, settingsLoading, onSettingsChange, onJumpToDoc }: { workspacePath: string; projectId?: string; onTitleChange: (title: string) => void; newSessionRequest: number; requestedThreadId: string | null; trustAgent: boolean; provider: 'siliconflow' | 'deepseek'; modelName: string; models: Array<{ provider: 'siliconflow' | 'deepseek'; model_name: string; display_name: string }>; settingsLoading: boolean; onSettingsChange: (patch: { trust_agent?: boolean; provider?: 'siliconflow' | 'deepseek'; model_name?: string }) => void; onJumpToDoc: (id: string) => void }) {
-  return <section className="dm-workspace-view"><div className="dm-chat-surface"><ChatPanel workspacePath={workspacePath} projectId={projectId} onTitleChange={onTitleChange} onJumpToDoc={onJumpToDoc} newSessionRequest={newSessionRequest} requestedThreadId={requestedThreadId} trustAgent={trustAgent} provider={provider} modelName={modelName} models={models} settingsLoading={settingsLoading} onSettingsChange={onSettingsChange} /></div></section>
+function RemovalDialog({ request, busy, error, onCancel, onConfirm }: { request: RemovalRequest; busy: boolean; error: string | null; onCancel: () => void; onConfirm: () => void }) {
+  const cancelButton = useRef<HTMLButtonElement>(null)
+  const dialog = useRef<HTMLElement>(null)
+  useEffect(() => { if (busy) dialog.current?.focus(); else cancelButton.current?.focus() }, [busy])
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null
+    cancelButton.current?.focus()
+    return () => { if (previous?.isConnected) previous.focus() }
+  }, [])
+  return <div className="dm-dialog-overlay dm-removal-overlay"><button className="dm-dialog-scrim" disabled={busy} aria-label="取消移除" onClick={onCancel} />
+    <section ref={dialog} tabIndex={-1} className="dm-removal-dialog" role="alertdialog" aria-modal="true" aria-labelledby="removal-title" aria-describedby="removal-description" aria-busy={busy} onKeyDown={event => {
+      if (event.key === 'Escape' && !busy) { event.preventDefault(); onCancel() }
+      if (event.key === 'Tab') {
+        if (busy) { event.preventDefault(); return }
+        const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'))
+        const first = buttons[0], last = buttons.at(-1)
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
+      }
+    }}>
+      <div className="dm-removal-heading"><span className="dm-removal-mark"><Icon name="folder" size={23} /></span><div><h2 id="removal-title">{request.title}</h2><p id="removal-description">{request.description}</p></div></div>
+      <ul className="dm-removal-items">{request.items.map((item, index) => <li key={`${item.path || item.name}:${index}`}><Icon name="file" size={17} /><span><b>{item.name}</b>{item.path && <small title={item.path}>{item.path}</small>}</span></li>)}</ul>
+      {error && <p role="alert" className="dm-inline-error">{error}</p>}
+      {busy && <p className="dm-removal-progress" role="status"><svg className="dm-index-spinner" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="8" opacity=".2" /><path d="M12 4a8 8 0 0 1 8 8" /></svg>正在移除并清理索引…</p>}
+      <footer><button ref={cancelButton} type="button" className="dm-outline-button" disabled={busy} onClick={onCancel}>取消</button><button type="button" className="dm-dialog-primary" disabled={busy} onClick={onConfirm}>{busy ? '正在移除…' : error ? '重试移除' : '确认移除'}</button></footer>
+    </section>
+  </div>
 }
 
-function DocumentViewer({ doc, onChat }: { doc: FilePreview; onChat: () => void }) {
+function WorkspaceView({ initialReference, onReferenceApplied, workspacePath, projectId, onTitleChange, newSessionRequest, requestedThreadId, trustAgent, provider, modelName, models, settingsLoading, onSettingsChange, onJumpToDoc }: { initialReference?: WorkspaceFile; onReferenceApplied: () => void; workspacePath: string; projectId?: string; onTitleChange: (title: string) => void; newSessionRequest: number; requestedThreadId: string | null; trustAgent: boolean; provider: 'siliconflow' | 'deepseek'; modelName: string; models: Array<{ provider: 'siliconflow' | 'deepseek'; model_name: string; display_name: string }>; settingsLoading: boolean; onSettingsChange: (patch: { trust_agent?: boolean; provider?: 'siliconflow' | 'deepseek'; model_name?: string }) => void; onJumpToDoc: (id: string) => void }) {
+  return <section className="dm-workspace-view"><div className="dm-chat-surface"><ChatPanel onReferenceApplied={onReferenceApplied} initialReference={initialReference} workspacePath={workspacePath} projectId={projectId} onTitleChange={onTitleChange} onJumpToDoc={onJumpToDoc} newSessionRequest={newSessionRequest} requestedThreadId={requestedThreadId} trustAgent={trustAgent} provider={provider} modelName={modelName} models={models} settingsLoading={settingsLoading} onSettingsChange={onSettingsChange} /></div></section>
+}
+
+function DocumentViewer({ doc, onChat, opening }: { doc: FilePreview; onChat: () => void; opening: boolean }) {
   const date = new Date(doc.uploaded_at).toLocaleDateString('zh-CN')
-  return <section className="dm-document-viewer"><header className="dm-document-header"><div className="dm-document-title"><div className="dm-file-icon" data-file-type={doc.filename.split('.').at(-1)?.toLowerCase()}><Icon name="file" size={26} /></div><div className="dm-document-title-copy"><p className="dm-eyebrow">文件区 / 原文件</p><h1 title={doc.filename}>{doc.filename}</h1><p>{doc.char_count.toLocaleString()} 字 · {(doc.size_bytes / 1024).toFixed(1)} KB · {date}</p></div></div><div className="dm-document-actions"><button onClick={onChat}><Icon name="message" size={16} />进入工作区</button></div></header><div className="dm-document-path"><Icon name="folder" size={15} /><span title={doc.saved_path}>{doc.saved_path}</span></div><div className="dm-document-body">{doc.truncated && <p className="dm-preview-note">预览仅显示前 20 万字，索引不受此限制</p>}{doc.text ? <pre>{doc.text}</pre> : <div className="dm-no-text"><Icon name="file" size={28} /><h2>暂时没有可预览的文本</h2><p>该文件可能是扫描件，后续可在工作区让 Agent 协助识别与整理。</p><button onClick={onChat}>进入工作区</button></div>}</div></section>
+  return <section className="dm-document-viewer"><header className="dm-document-header"><div className="dm-document-title"><div className="dm-file-icon" data-file-type={doc.filename.split('.').at(-1)?.toLowerCase()}><Icon name="file" size={26} /></div><div className="dm-document-title-copy"><h1 title={doc.filename}>{doc.filename}</h1><p>{doc.char_count.toLocaleString()} 字 · {(doc.size_bytes / 1024).toFixed(1)} KB · {date}</p></div></div><div className="dm-document-actions"><button disabled={opening} onClick={onChat}><Icon name="message" size={16} />进入工作区</button></div></header><div className="dm-document-path"><Icon name="folder" size={15} /><span title={doc.saved_path}>{doc.saved_path}</span></div><div className="dm-document-body">{doc.truncated && <p className="dm-preview-note">预览仅显示前 20 万字，索引不受此限制</p>}{doc.text ? <pre>{doc.text}</pre> : <div className="dm-no-text"><Icon name="file" size={28} /><h2>暂时没有可预览的文本</h2><p>该文件可能是扫描件，后续可在工作区让 Agent 协助识别与整理。</p><button disabled={opening} onClick={onChat}>进入工作区</button></div>}</div></section>
 }
 
 function ProfileDrawer({ name, account, localMode, apiKeys, stats, onClose, onLogout, onNotice, onConfigureApiKey, onDeleteApiKey }: { name: string; account: string; localMode: boolean; apiKeys: ApiKeyStatus[]; stats: { document_count: number; thread_count: number; total_tokens: number }; onClose: () => void; onLogout: () => Promise<void>; onNotice: (message: string) => void; onConfigureApiKey: (provider: 'siliconflow' | 'deepseek') => void; onDeleteApiKey: (provider: 'siliconflow' | 'deepseek') => Promise<void> }) {

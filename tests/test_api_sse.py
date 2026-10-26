@@ -11,6 +11,7 @@ from src.backend.services.conversation import (
     ErrorStreamEvent,
     ModelChunkEvent,
     StatusStreamEvent,
+    ToolStreamEvent,
     TurnResult,
     TurnResultStreamEvent,
 )
@@ -233,3 +234,30 @@ def test_cancel_endpoint_targets_one_run() -> None:
     assert coordinator.calls == [
         ("cancel_run", {"thread_id": "thread-1", "run_id": "run-1"})
     ]
+
+
+def test_tool_progress_uses_a_separate_sse_event() -> None:
+    coordinator = StreamingCoordinator([
+        ToolStreamEvent(tool_call_id="read-1", name="read_text_file", args={"relative_path": "report.md"}, status="running"),
+        ToolStreamEvent(tool_call_id="read-1", name="read_text_file", args={"relative_path": "report.md"}, status="error", result={"ok": False, "error": {"message": "文件不存在"}}),
+        ErrorStreamEvent("RunCancelledError", "任务已停止"),
+    ])
+    with TestClient(create_app(coordinator)) as client:
+        response = client.post("/api/threads/thread-1/turns/stream", json={"workspace_path": WORKSPACE, "content": "读取文件"})
+    events = parse_sse(response.text)
+    assert [name for name, _ in events] == ["tool", "tool", "error"]
+    assert events[0][1]["status"] == "running"
+    assert events[1][1]["result"]["error"]["message"] == "文件不存在"
+    assert events[-1][1]["error_type"] == "RunCancelledError"
+    assert all("text" not in payload for name, payload in events if name == "tool")
+
+
+def test_reasoning_blocks_are_not_serialized_as_visible_text() -> None:
+    coordinator = StreamingCoordinator([ModelChunkEvent(
+        chunk=AIMessageChunk(content=[{"type": "reasoning", "text": "internal reasoning"}, {"type": "text", "text": "可见说明"}]),
+        metadata={"langgraph_node": "model"},
+    )])
+    with TestClient(create_app(coordinator)) as client:
+        response = client.post("/api/threads/thread-1/turns/stream", json={"workspace_path": WORKSPACE, "content": "hello"})
+    assert parse_sse(response.text)[0][1]["text"] == "可见说明"
+    assert "internal reasoning" not in response.text

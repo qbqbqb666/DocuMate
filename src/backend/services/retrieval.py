@@ -26,6 +26,12 @@ def _signature(path: Path) -> str:
     return f"{stat.st_dev}:{stat.st_ino}:{stat.st_size}:{stat.st_mtime_ns}:{stat.st_ctime_ns}"
 
 
+def _readable_error(error: str | None) -> str | None:
+    if error and ("codec can't decode byte" in error or "invalid start byte" in error):
+        return "无法按 UTF-8 解码文本：文件可能是二进制缓存，或使用了其他文本编码。"
+    return error
+
+
 class RetrievalService:
     """本地基础语义检索，按文件版本原子发布，不修改或备份原文件。"""
 
@@ -44,6 +50,21 @@ class RetrievalService:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._root_provider: Callable[[], list[str]] = lambda: []
+        self.retain_path: Callable[[Path], bool] = lambda path: True
+        self.visible_path: Callable[[Path, list[Path]], bool] = lambda path, roots: True
+
+    def prune_removed(self) -> None:
+        with self._lock:
+            if not self.database.exists():
+                return
+            db = self._connect()
+            try:
+                with db:
+                    for row in db.execute("SELECT path FROM files").fetchall():
+                        if not self.retain_path(Path(row["path"])):
+                            db.execute("DELETE FROM files WHERE path=?", (row["path"],))
+            finally:
+                db.close()
 
     def _connect(self) -> sqlite3.Connection:
         import sqlite_vec
@@ -100,7 +121,7 @@ class RetrievalService:
                     state, error = record["status"], record["error"]
             except (OSError, ValueError):
                 state, error = "missing", "原文件已移除或路径已改变"
-            files.append({"path": str(path), "status": state, "error": error})
+            files.append({"path": str(path), "status": state, "error": _readable_error(error)})
         return {"files": files, "ready": sum(f["status"] == "ready" for f in files),
                 "pending": sum(f["status"] == "pending" for f in files),
                 "indexing": sum(f["status"] == "indexing" for f in files),
@@ -123,9 +144,9 @@ class RetrievalService:
                 with self._queue_lock:
                     requested = list(self._requests)
                     self._requests.clear()
-                roots = [*self._root_provider(), *requested]
+                roots = [root for root in [*self._root_provider(), *requested] if self.retain_path(Path(root))]
                 with self._lock:
-                    registered = list(self._roots)
+                    registered = [root for root in self._roots if self.retain_path(root)]
                 if roots or registered:
                     self.synchronize([*roots, *registered], self._check_running)
                 self._last_error = None
@@ -152,7 +173,7 @@ class RetrievalService:
                     scan_roots.add(legacy)
             for root in sorted(scan_roots):
                 cancel_check()
-                if not root.exists() or root.is_symlink() or root.resolve() != root:
+                if not self.retain_path(root) or not root.exists() or root.is_symlink() or root.resolve() != root:
                     continue
                 if root in self._file_roots:
                     if root.is_file() and not root.is_symlink() and root.suffix.lower() in SUPPORTED_SUFFIXES:
@@ -171,11 +192,12 @@ class RetrievalService:
                             paths.add(path)
                             if len(paths) > 20_000:
                                 raise ValueError("资料文件超过单次扫描的 20000 份上限")
+            paths = {path for path in paths if self.retain_path(path)}
             db = self._connect()
             try:
                 for row in db.execute("SELECT path FROM files").fetchall():
                     path = Path(row["path"])
-                    if any(path.is_relative_to(root) for root in roots) and path not in paths:
+                    if not self.retain_path(path) or (any(path.is_relative_to(root) for root in roots) and path not in paths):
                         with db:
                             db.execute("DELETE FROM files WHERE path=?", (str(path),))
                 if not paths:
@@ -225,6 +247,10 @@ class RetrievalService:
                             raise ValueError("没有可检索文字（扫描 PDF 暂不支持 OCR）")
                         vectors = self.encoder.encode([block.text for block in blocks], cancel_check=cancel_check)
                         cancel_check()
+                        if not self.retain_path(path):
+                            with db:
+                                db.execute("DELETE FROM files WHERE path=?", (str(path),))
+                            continue
                         if _signature(path) != signature:
                             with db:
                                 db.execute("UPDATE files SET status='pending',changed_at=? WHERE path=?", (time.time(), str(path)))
@@ -239,7 +265,7 @@ class RetrievalService:
                         raise
                     except Exception as error:
                         with db:
-                            db.execute("UPDATE files SET status='error',error=?,changed_at=? WHERE path=?", (str(error)[:500], time.time(), str(path)))
+                            db.execute("UPDATE files SET status='error',error=?,changed_at=? WHERE path=?", (_readable_error(str(error))[:500], time.time(), str(path)))
             finally:
                 db.close()
 
@@ -269,6 +295,8 @@ class RetrievalService:
                 for row in rows:
                     cancel_check()
                     path = Path(row["path"])
+                    if not self.visible_path(path, roots):
+                        continue
                     try:
                         if _signature(path) != row["signature"]:
                             with db:
@@ -282,7 +310,7 @@ class RetrievalService:
                     hits.append({"path": str(path), "filename": path.name, "sha256": row["sha256"], "similarity": 1 - row["distance"], "matches": [{"chunk_id": item["id"], "text": item["text"][:800], "truncated": len(item["text"]) > 800, "location": json.loads(item["location"]), "similarity": 1 - item["distance"]} for item in matches]})
                     if len(hits) == top_k:
                         break
-                statuses = [dict(row) for row in db.execute(f"SELECT f.path,f.status,f.error FROM files f WHERE {conditions}", parameters)]
+                statuses = [dict(row) for row in db.execute(f"SELECT f.path,f.status,f.error FROM files f WHERE {conditions}", parameters) if self.visible_path(Path(row["path"]), roots)]
                 return {"query": query, "roots": [str(root) for root in roots], "files": hits,
                         "index": {"ready": sum(r["status"] == "ready" for r in statuses), "pending": sum(r["status"] == "pending" for r in statuses), "errors": [r for r in statuses if r["status"] == "error"]},
                         "note": "基础语义候选，分数不是正确率；需按原文件核对。待更新和失败文件不参与检索。"}

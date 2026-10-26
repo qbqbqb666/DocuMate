@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+from docx import Document
 from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
 
@@ -110,6 +111,24 @@ class DocumentToolsTest(unittest.TestCase):
             check_rendering=False,
         )
         self.assertTrue(validated["valid"])
+
+    def test_read_docx_without_default_paragraph_style_preserves_content(self) -> None:
+        document = Document()
+        document.add_heading("保留标题", level=1)
+        document.add_paragraph("没有默认样式的正文")
+        document.add_table(rows=1, cols=1).cell(0, 0).text = "表格内容"
+        document.styles["Normal"].delete()
+        path = self.workspace / "missing-style.docx"
+        document.save(path)
+        original = path.read_bytes()
+        self.assertIsNone(Document(path).paragraphs[1].style)
+
+        result = read_docx.func(runtime=self.runtime, relative_path=path.name)
+
+        self.assertIn("没有默认样式的正文", result["content"])
+        self.assertEqual(result["headings"], [{"level": "Heading 1", "text": "保留标题"}])
+        self.assertEqual(result["tables"][0][0][0], "表格内容")
+        self.assertEqual(path.read_bytes(), original)
 
     def test_pdf_create_read_and_page_edit_round_trip(self) -> None:
         created = create_pdf.func(

@@ -73,7 +73,15 @@ export interface TurnResultPayload {
   } | null
 }
 
+export interface ToolEventPayload {
+  tool_call_id: string
+  name: string
+  args: Record<string, unknown>
+  status: 'running' | 'success' | 'error' | 'denied'
+  result?: unknown
+}
+
 export interface SseEvent<T = unknown> {
-  event: 'status' | 'model_chunk' | 'approval' | 'result' | 'error' | string
+  event: 'status' | 'model_chunk' | 'tool' | 'approval' | 'result' | 'error' | string
   data: T
 }

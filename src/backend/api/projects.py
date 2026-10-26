@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, status
 
 from src.backend.api.schemas import CreateProjectRequest, ProjectResponse
 from src.backend.api.workspace import get_app_config
+from src.backend.api.workspace_files import get_index
+from src.backend.services.retrieval import RetrievalService
 from src.backend.services.app_config import AppConfigService
 
 
@@ -29,3 +31,12 @@ def activate_project(
     service: AppConfigService = Depends(get_app_config),
 ) -> dict:
     return service.activate_project(project_id)
+
+
+@router.delete("/{project_id}")
+def remove_project(project_id: str, service: AppConfigService = Depends(get_app_config), index: RetrievalService = Depends(get_index)) -> dict:
+    service.remove_project(project_id)
+    index.retain_path = service.document_retained
+    index.visible_path = service.search_visible
+    index.prune_removed()
+    return {"removed": True}

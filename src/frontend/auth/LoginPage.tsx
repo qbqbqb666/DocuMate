@@ -4,6 +4,7 @@ import { AuthAPI, AuthError } from './AuthClient'
 import { AuthHero, type RobotMood } from './AuthHero'
 import { BrandMark } from '../components/BrandMark'
 import { EmailVerificationForm } from './EmailVerificationForm'
+import { PasswordInput } from './PasswordInput'
 
 export function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: () => void }) {
   const { login } = useAuth()
@@ -18,7 +19,7 @@ export function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: () => vo
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setError(''); setBusy(true)
     try { await login({ email: email.trim().toLowerCase(), password }, remember) }
-    catch (reason) { setError(reason instanceof AuthError ? reason.detail : '登录失败，请检查网络后重试') }
+    catch (reason) { setError(reason instanceof AuthError ? reason.detail : '登录过程中发生异常，请稍后重试') }
     finally { setBusy(false) }
   }
   return <div className="auth-page"><AuthHero mood={robotMood} /><main className="auth-panel">
@@ -29,7 +30,7 @@ export function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: () => vo
         <label>邮箱<input type="email" autoComplete="username" required maxLength={254} value={email}
           placeholder="输入邮箱地址" disabled={busy} onChange={event => setEmail(event.target.value)} /></label>
         <label><span>密码<button type="button" onClick={() => { setResetDone(false); setForgot(true) }}>忘记密码？</button></span>
-          <input type="password" autoComplete="current-password" required minLength={6} maxLength={128}
+          <PasswordInput autoComplete="current-password" required minLength={6} maxLength={128}
             value={password} placeholder="输入密码" disabled={busy} onChange={event => setPassword(event.target.value)}
             onFocus={() => setRobotMood('peek')} onBlur={() => setRobotMood('idle')} /></label>
         <label className="auth-check"><input type="checkbox" checked={remember} disabled={busy}

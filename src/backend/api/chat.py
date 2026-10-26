@@ -15,6 +15,7 @@ from src.backend.api.schemas import (
     ErrorDetail,
     ModelChunkEventResponse,
     StatusEventResponse,
+    ToolEventResponse,
     TurnResultResponse,
 )
 from src.backend.services.conversation import (
@@ -23,6 +24,7 @@ from src.backend.services.conversation import (
     ErrorStreamEvent,
     ModelChunkEvent,
     StatusStreamEvent,
+    ToolStreamEvent,
     TurnResult,
     TurnResultStreamEvent,
     TurnStreamEvent,
@@ -274,6 +276,17 @@ def encode_stream_event(event: TurnStreamEvent) -> str:
         )
     if isinstance(event, ModelChunkEvent):
         return encode_sse("model_chunk", _model_chunk_response(event))
+    if isinstance(event, ToolStreamEvent):
+        return encode_sse(
+            "tool",
+            ToolEventResponse(
+                tool_call_id=event.tool_call_id,
+                name=event.name,
+                args=event.args,
+                status=event.status,
+                result=event.result,
+            ),
+        )
     if isinstance(event, ApprovalStreamEvent):
         approval = event.approval_request
         return encode_sse(
@@ -338,7 +351,7 @@ def _chunk_text(content: Any) -> str:
         if isinstance(block, str):
             parts.append(block)
         elif isinstance(block, dict):
-            text = block.get("text")
+            text = block.get("text") if block.get("type") == "text" else None
             if isinstance(text, str):
                 parts.append(text)
         else:

@@ -160,6 +160,17 @@ ipcMain.handle('workspace:pick-files', async (event) => {
   })
   return result.canceled ? [] : result.filePaths
 })
+ipcMain.handle('workspace:pick-folders', async (event) => {
+  if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) {
+    throw new Error('无效的文件夹选择请求')
+  }
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '选择要加入的资料文件夹',
+    buttonLabel: '选择文件夹',
+    properties: ['openDirectory', 'multiSelections'],
+  })
+  return result.canceled ? [] : result.filePaths
+})
 ipcMain.handle('shell:open-folder', async (_event, target) => !target ? false : (await shell.openPath(target)) === '')
 ipcMain.handle('shell:open-file', async (_event, target) => !target ? false : (await shell.openPath(target)) === '')
 ipcMain.handle('shell:reveal-file', (_event, target) => { if (!target) return false; shell.showItemInFolder(target); return true })

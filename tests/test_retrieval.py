@@ -381,3 +381,50 @@ def test_index_status_stays_responsive_during_embedding(tmp_path, service):
         while time.monotonic() < deadline and service.index_status([source])["ready"] != 1:
             time.sleep(.05)
         assert service.index_status([source])["ready"] == 1
+
+
+def test_removed_sources_stay_removed_and_shared_index_is_preserved(tmp_path, service):
+    from src.backend.services.app_config import AppConfigService
+    root = tmp_path.resolve()
+    a = root / 'a'; a.mkdir()
+    b = root / 'b'; b.mkdir()
+    shared = root / 'shared.txt'; shared.write_text('采购供应商风险管理')
+    config = AppConfigService(root / 'config.json')
+    first = config.create_project('a', [str(a)])
+    config.register_documents(str(a), first['id'], [{'path': str(shared), 'kind': 'file'}])
+    second = config.create_project('b', [str(b)])
+    config.register_documents(str(b), second['id'], [{'path': str(shared), 'kind': 'file'}])
+    service.retain_path = config.document_retained
+    service.visible_path = config.search_visible
+    service.synchronize([a, b, shared])
+    config.remove_document(str(b), second['id'], str(shared))
+    service.prune_removed()
+    assert service.index_status([shared])['ready'] == 1
+    assert service.search('采购风险', [b, shared])['files'] == []
+    assert service.search('采购风险', [a, shared])['files'][0]['path'] == str(shared)
+    config.remove_project(first['id'])
+    service.prune_removed()
+    with sqlite3.connect(service.database) as db:
+        assert db.execute('SELECT COUNT(*) FROM files').fetchone()[0] == 0
+        assert db.execute('SELECT COUNT(*) FROM chunks').fetchone()[0] == 0
+    service.synchronize([a, b, shared])
+    assert service.index_status([shared])['ready'] == 0
+    assert shared.read_text() == '采购供应商风险管理'
+
+
+def test_binary_txt_failure_has_readable_reason_and_remains_excluded(tmp_path, service):
+    root = tmp_path.resolve() / 'sources'; root.mkdir()
+    binary = root / 'index.txt'; binary.write_bytes(b'CacheStorage\x00\x80\xff')
+    text = root / 'real.txt'; text.write_text('采购供应商风险管理')
+    service.synchronize([root])
+    status = service.index_status([binary, text])
+    assert status['ready'] == 1
+    assert len(status['errors']) == 1
+    assert 'UTF-8' in status['errors'][0]['error']
+    assert '二进制' in status['errors'][0]['error']
+    assert binary.read_bytes() == b'CacheStorage\x00\x80\xff'
+    assert all(hit['path'] != str(binary) for hit in service.search('采购', [root])['files'])
+    # Existing database errors receive the readable explanation as well.
+    with sqlite3.connect(service.database) as db:
+        db.execute("UPDATE files SET error=? WHERE path=?", ("'utf-8' codec can't decode byte 0x80: invalid start byte", str(binary)))
+    assert 'UTF-8' in service.index_status([binary])['errors'][0]['error']

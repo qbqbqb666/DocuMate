@@ -27,10 +27,15 @@ def project_roots(config: AppConfigService) -> list[Path]:
 
 
 def get_index(request: Request) -> RetrievalService:
-    return request.app.state.runtime.retrieval or get_retrieval_service()
+    service = request.app.state.runtime.retrieval or get_retrieval_service()
+    config = get_app_config(request)
+    service.retain_path = config.document_retained
+    service.visible_path = config.search_visible
+    return service
 
 
 class DocumentSource(BaseModel):
+    group_path: str | None = None
     path: str
     kind: Literal["file", "directory"]
 
@@ -88,6 +93,35 @@ def register_documents(body: RegisterDocuments, config: AppConfigService = Depen
     return {"registered": len(body.sources)}
 
 
+class RemoveDocument(BaseModel):
+    workspace_path: str
+    project_id: str | None = None
+    path: str | None = None
+    paths: list[str] | None = Field(default=None, min_length=1, max_length=20_000)
+
+
+@router.post("/remove")
+def remove_document(body: RemoveDocument, config: AppConfigService = Depends(get_app_config), service: RetrievalService = Depends(get_index)) -> dict:
+    config.remove_documents(body.workspace_path, body.project_id, body.paths or ([body.path] if body.path else []))
+    service.retain_path = config.document_retained
+    service.visible_path = config.search_visible
+    service.prune_removed()
+    return {"removed": True}
+
+
+@router.post("/enter-workspace")
+def enter_workspace(body: CandidateRequest, config: AppConfigService = Depends(get_app_config), service: RetrievalService = Depends(get_index)) -> dict:
+    if len(body.paths) != 1:
+        raise ValueError("请选择一个文件")
+    path = scoped_path(config, body.paths[0])
+    if not path.is_file() or path.suffix.lower() not in SUPPORTED_SUFFIXES:
+        raise ValueError("请选择支持的资料文件")
+    project = config.project_for_document(str(path))
+    config.activate_project(project["id"])
+    service.request_index([path])
+    return {"project": project, "file": entry(path), "index": service.index_status([path])["files"][0]}
+
+
 @router.post("/refresh")
 def refresh_index(config: AppConfigService = Depends(get_app_config), service: RetrievalService = Depends(get_index)) -> dict:
     service.request_index(config.index_paths())
@@ -99,7 +133,7 @@ def index_status(config: AppConfigService = Depends(get_app_config), service: Re
     paths = project_roots(config)
     missing = [Path(source["path"]) for source in config.workspace_sources()
                if not config.source_exists(source)]
-    return service.index_status([*scan_files(paths), *missing])
+    return service.index_status([path for path in [*scan_files(paths), *missing] if config.document_visible(path)])
 
 
 def visible(path: Path) -> bool:
@@ -111,6 +145,8 @@ def scoped_path(config: AppConfigService, value: str) -> Path:
     if not path.is_absolute() or any(part == ".." for part in path.parts):
         raise ValueError("文件路径无效")
     roots = project_roots(config)
+    if not config.document_visible(path, directory=path.is_dir()):
+        raise ValueError("资料已从当前项目移除")
     if not any(path == root or path.is_relative_to(root) for root in roots):
         raise ValueError("文件路径超出当前项目")
     if path.resolve() != path or path.is_symlink():
@@ -135,10 +171,13 @@ def entry(path: Path) -> dict:
 @router.get("")
 def roots(config: AppConfigService = Depends(get_app_config)) -> dict:
     paths = project_roots(config)
-    files = scan_files(paths)
+    files = {path for path in scan_files(paths) if config.document_visible(path)}
     sources = {source["path"]: source["kind"] for source in config.workspace_sources()}
+    groups = {source["path"]: source.get("group_path") for source in config.workspace_sources() if source.get("group_path")}
     entries = []
     for path in dict.fromkeys([*paths, *(Path(value) for value in sources)]):
+        if not config.document_visible(path, directory=sources.get(str(path)) == "directory" or path.is_dir()):
+            continue
         if path.exists() and (str(path) not in sources or config.source_exists({"path": str(path), "kind": sources[str(path)]})):
             item = entry(path)
         else:
@@ -147,6 +186,8 @@ def roots(config: AppConfigService = Depends(get_app_config)) -> dict:
                     "size_bytes": 0, "uploaded_at": "", "previewable": False, "missing": True}
         if path.parts[-2:] == (".documate", "documents"):
             item["filename"] = f"旧版导入资料 · {path.parent.parent.name}"
+        if str(path) in groups:
+            item["group_path"] = groups[str(path)]
         entries.append(item)
     return {"roots": entries, "total_files": len(files)}
 
@@ -156,7 +197,7 @@ def children(path: str, offset: int = Query(0, ge=0), limit: int = Query(100, ge
     directory = scoped_path(config, path)
     if not directory.is_dir():
         raise ValueError("请选择文件夹")
-    items = sorted((p for p in directory.iterdir() if visible(p) and (p.is_dir() or p.is_file())), key=lambda p: (not p.is_dir(), p.name.casefold()))
+    items = sorted((p for p in directory.iterdir() if visible(p) and config.document_visible(p, directory=p.is_dir()) and (p.is_dir() or p.is_file())), key=lambda p: (not p.is_dir(), p.name.casefold()))
     return {"entries": [entry(p) for p in items[offset:offset + limit]], "total": len(items)}
 
 

@@ -79,22 +79,38 @@ async function request<T>(
   }
   if (auth) h['Authorization'] = `Bearer ${auth}`
 
-  const resp = await fetch(`${base}${path}`, { ...rest, headers: h })
-  const text = await resp.text()
-
-  if (!resp.ok) {
-    let detail = `HTTP ${resp.status}`
-    try {
-      const j = JSON.parse(text)
-      detail = readableDetail(j.detail ?? j.message ?? j.error, detail)
-    } catch {
-      if (text) detail = text.slice(0, 300)
+  const controller = new AbortController()
+  let timedOut = false
+  const cancel = () => controller.abort()
+  if (rest.signal?.aborted) cancel()
+  rest.signal?.addEventListener('abort', cancel, { once: true })
+  const timer = window.setTimeout(() => { timedOut = true; controller.abort() }, 15000)
+  const service = base === BASE ? '认证服务' : '本地服务'
+  try {
+    const resp = await fetch(`${base}${path}`, { ...rest, headers: h, signal: controller.signal })
+    const text = await resp.text()
+    if (!resp.ok) {
+      let detail = `${service}请求失败（HTTP ${resp.status}）`
+      try {
+        const j = JSON.parse(text)
+        detail = readableDetail(j.detail ?? j.message ?? j.error, detail)
+      } catch { /* Non-JSON error pages are not useful login messages. */ }
+      throw new AuthError(resp.status, detail, Number(resp.headers.get('Retry-After')) || 0)
     }
-    throw new AuthError(resp.status, detail, Number(resp.headers.get("Retry-After")) || 0)
+    if (resp.status === 204 || !text) return undefined as T
+    try { return JSON.parse(text) as T }
+    catch { throw new AuthError(resp.status, `${service}返回了无法识别的数据，请稍后重试。`) }
+  } catch (reason) {
+    if (reason instanceof AuthError) throw reason
+    if (timedOut) throw new AuthError(0, `${service}连接超时，请稍后重试。`)
+    if (rest.signal?.aborted) throw new AuthError(0, '请求已取消。')
+    throw new AuthError(0, base === BASE
+      ? '无法连接认证服务，连接可能被网络或代理中断。请稍后重试。'
+      : '无法连接本地服务，请确认 DocuMate 后台已启动。')
+  } finally {
+    window.clearTimeout(timer)
+    rest.signal?.removeEventListener('abort', cancel)
   }
-
-  if (resp.status === 204 || !text) return undefined as T
-  return JSON.parse(text) as T
 }
 
 // ============================================================

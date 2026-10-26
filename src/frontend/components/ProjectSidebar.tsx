@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ProjectSummary } from '../api/types'
 import { useSessions } from '../hooks/useSessions'
 import { Icon } from './Icon'
@@ -10,21 +10,32 @@ interface Props {
   onOpenThread: (project: ProjectSummary, threadId: string, title: string) => void
   onNewThread: (project: ProjectSummary) => void
   onDeleteThread: (threadId: string) => void
+  onDeleteProject: (project: ProjectSummary) => void
 }
 
-export function ProjectSidebar({ projects, activeThreadId, resetKey, onOpenThread, onNewThread, onDeleteThread }: Props) {
-  return <div className="dm-project-tree"><div className="dm-project-tree-label">项目</div>{projects.map((project) => <ProjectGroup key={project.id} project={project} activeThreadId={activeThreadId} resetKey={resetKey} onOpenThread={onOpenThread} onNewThread={onNewThread} onDeleteThread={onDeleteThread} />)}</div>
+export function ProjectSidebar({ projects, activeThreadId, resetKey, onOpenThread, onNewThread, onDeleteThread, onDeleteProject }: Props) {
+  return <div className="dm-project-tree"><div className="dm-project-tree-label">项目</div>{projects.map((project) => <ProjectGroup key={project.id} project={project} activeThreadId={activeThreadId} resetKey={resetKey} onOpenThread={onOpenThread} onNewThread={onNewThread} onDeleteThread={onDeleteThread} onDeleteProject={onDeleteProject} />)}</div>
 }
 
-function ProjectGroup({ project, activeThreadId, resetKey, onOpenThread, onNewThread, onDeleteThread }: Omit<Props, 'projects'> & { project: ProjectSummary }) {
+function ProjectGroup({ project, activeThreadId, resetKey, onOpenThread, onNewThread, onDeleteThread, onDeleteProject }: Omit<Props, 'projects'> & { project: ProjectSummary }) {
   const sessions = useSessions(project.primary_path, project.id)
   const [collapsed, setCollapsed] = useState(false)
   const [menuId, setMenuId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  const [projectMenu, setProjectMenu] = useState(false)
+  const projectMenuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!projectMenu) return
+    const close = (event: MouseEvent) => { if (!projectMenuRef.current?.contains(event.target as Node)) setProjectMenu(false) }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setProjectMenu(false) }
+    document.addEventListener('mousedown', close); document.addEventListener('keydown', escape)
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', escape) }
+  }, [projectMenu])
 
   useEffect(() => {
     setMenuId(null)
+    setProjectMenu(false)
     setEditingId(null)
   }, [resetKey])
 
@@ -32,6 +43,7 @@ function ProjectGroup({ project, activeThreadId, resetKey, onOpenThread, onNewTh
     <div className="dm-project-row">
       <button className="dm-project-toggle" onClick={() => setCollapsed((value) => !value)} aria-expanded={!collapsed} aria-label={`${collapsed ? '展开项目' : '折叠项目'} ${project.name}`} title={project.name}><span className={collapsed ? '' : 'is-open'}><Icon name="chevron" size={12} /></span><Icon name="folder" size={17} /><b>{project.name}</b></button>
       <button className="dm-project-add" onClick={() => onNewThread(project)} title={`在 ${project.name} 中新建对话`}><Icon name="plus" size={15} /></button>
+      <div ref={projectMenuRef} className="dm-tree-menu-anchor"><button type="button" className="dm-thread-more" aria-label={`项目操作 ${project.name}`} aria-expanded={projectMenu} onClick={() => setProjectMenu(value => !value)}><Icon name="more" size={16} /></button>{projectMenu && <div className="dm-thread-menu" role="menu"><button type="button" role="menuitem" className="is-danger" onClick={() => { setProjectMenu(false); onDeleteProject(project) }}>删除</button></div>}</div>
     </div>
     {!collapsed && <div className="dm-project-threads">
       {sessions.loading && <p>正在读取…</p>}

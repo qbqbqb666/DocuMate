@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Literal, TypedDict
 from uuid import uuid4
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langgraph.types import Command, Interrupt
 
 from src.backend.agent.context import AgentContext, ModelProvider, PermissionMode
@@ -118,6 +118,18 @@ class StatusStreamEvent:
 
 
 @dataclass(frozen=True)
+class ToolStreamEvent:
+    """工具的真实执行状态，与助手正文分开传输。"""
+
+    tool_call_id: str
+    name: str
+    args: dict[str, Any]
+    status: Literal["running", "success", "error", "denied"]
+    result: Any = None
+    type: Literal["tool"] = "tool"
+
+
+@dataclass(frozen=True)
 class ApprovalStreamEvent:
     """当前 turn 因工具审批暂停。"""
 
@@ -146,6 +158,7 @@ class ErrorStreamEvent:
 TurnStreamEvent = (
     ModelChunkEvent
     | StatusStreamEvent
+    | ToolStreamEvent
     | ApprovalStreamEvent
     | TurnResultStreamEvent
     | ErrorStreamEvent
@@ -874,9 +887,22 @@ class ConversationCoordinator:
                 context.cancellation.raise_if_cancelled()
                 if mode == "messages":
                     chunk, metadata = data
-                    yield ModelChunkEvent(chunk=chunk, metadata=dict(metadata))
+                    if (
+                        isinstance(chunk, (AIMessage, AIMessageChunk))
+                        and metadata.get("langgraph_node") == "model"
+                    ):
+                        yield ModelChunkEvent(chunk=chunk, metadata=dict(metadata))
                 elif mode == "custom":
-                    yield _status_stream_event(data)
+                    if isinstance(data, dict) and data.get("type") == "tool":
+                        yield ToolStreamEvent(
+                            tool_call_id=data["tool_call_id"],
+                            name=data["name"],
+                            args=data["args"],
+                            status=data["status"],
+                            result=data.get("result"),
+                        )
+                    else:
+                        yield _status_stream_event(data)
         finally:
             close = getattr(stream, "close", None)
             if callable(close):

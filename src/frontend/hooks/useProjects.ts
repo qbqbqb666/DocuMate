@@ -30,6 +30,13 @@ export function useProjects() {
     return project
   }, [])
 
+  const remove = useCallback(async (projectId: string) => {
+    await apiRequest(`/api/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' })
+    const remaining = await apiRequest<ProjectSummary[]>('/api/projects')
+    setProjects(remaining)
+    return remaining
+  }, [])
+
   useEffect(() => { void refresh() }, [refresh])
-  return { projects, loading, error, refresh, create, activate }
+  return { projects, loading, error, refresh, create, activate, remove }
 }

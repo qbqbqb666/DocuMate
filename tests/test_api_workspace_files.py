@@ -227,3 +227,123 @@ def test_register_folder_future_files_and_invalid_sources(tmp_path: Path, monkey
         assert client.post("/api/workspace-files/register", json={**body, "workspace_path": str(external)}).status_code == 422
         assert config.path.read_bytes() == before
     assert not (workspace / ".documate").exists()
+
+
+def test_remove_original_source_exclusions_restart_and_readd(tmp_path, monkeypatch):
+    from src.backend.api.workspace_files import get_index
+    from src.backend.services.retrieval import RetrievalService
+    root = tmp_path.resolve()
+    workspace = root / 'workspace'; workspace.mkdir()
+    folder = workspace / 'notes'; folder.mkdir()
+    first = folder / 'first.txt'; first.write_text('保留原文件')
+    second = folder / 'second.txt'; second.write_text('同目录其他文件')
+    config = AppConfigService(root / 'config.json')
+    project = config.create_project('main', [str(workspace)])
+    index = RetrievalService(root / 'index.sqlite3')
+    monkeypatch.setattr(index, 'request_index', lambda paths: None)
+    app = create_app(FakeCoordinator(), config)
+    app.dependency_overrides[get_index] = lambda: index
+    with TestClient(app) as client:
+        response = client.post('/api/workspace-files/remove', json={'workspace_path': str(workspace), 'project_id': project['id'], 'path': str(folder)})
+        assert response.status_code == 200
+        assert first.read_text() == '保留原文件'
+        assert client.get('/api/workspace-files/children', params={'path': str(workspace)}).json()['entries'] == []
+        assert client.get('/api/workspace-files/preview', params={'path': str(first)}).status_code == 422
+        assert client.get('/api/workspace-files').json()['total_files'] == 0
+        reloaded = AppConfigService(config.path)
+        assert not reloaded.document_visible(first)
+        # Explicitly restoring one file must not restore its siblings.
+        response = client.post('/api/workspace-files/register', json={'workspace_path': str(workspace), 'project_id': project['id'], 'sources': [{'path': str(first), 'kind': 'file'}]})
+        assert response.status_code == 200
+        assert client.get('/api/workspace-files').json()['total_files'] == 1
+        children = client.get('/api/workspace-files/children', params={'path': str(folder)}).json()['entries']
+        assert [item['id'] for item in children] == [str(first)]
+        assert not config.document_visible(second)
+        assert client.get('/api/projects').status_code == 200
+
+
+def test_enter_document_resolves_project_and_queues_only_this_file(tmp_path, monkeypatch):
+    from src.backend.api.workspace_files import get_index
+    from src.backend.services.retrieval import RetrievalService
+    root = tmp_path.resolve()
+    workspace = root / 'workspace'; workspace.mkdir()
+    outside = root / 'outside'; outside.mkdir()
+    selected = outside / 'selected.txt'; selected.write_text('所选资料')
+    sibling = outside / 'sibling.txt'; sibling.write_text('不自动入库')
+    config = AppConfigService(root / 'config.json')
+    project = config.create_project('main', [str(workspace)])
+    config.register_documents(str(workspace), project['id'], [{'path': str(selected), 'kind': 'file'}])
+    index = RetrievalService(root / 'index.sqlite3')
+    queued = []
+    monkeypatch.setattr(index, 'request_index', lambda paths: queued.extend(paths))
+    app = create_app(FakeCoordinator(), config)
+    app.dependency_overrides[get_index] = lambda: index
+    with TestClient(app) as client:
+        result = client.post('/api/workspace-files/enter-workspace', json={'paths': [str(selected)]})
+        assert result.status_code == 200
+        assert result.json()['project']['id'] == project['id']
+        assert result.json()['file']['saved_path'] == str(selected)
+        assert result.json()['index']['status'] == 'pending'
+        assert queued == [selected]
+        assert client.post('/api/workspace-files/enter-workspace', json={'paths': [str(sibling)]}).status_code == 422
+        config.remove_document(str(workspace), project['id'], str(selected))
+        assert client.post('/api/workspace-files/enter-workspace', json={'paths': [str(selected)]}).status_code == 422
+
+
+def test_partial_folder_group_persists_without_expanding_index_scope(tmp_path, monkeypatch):
+    from src.backend.api.workspace_files import get_index
+    from src.backend.services.retrieval import RetrievalService
+    base = tmp_path.resolve()
+    workspace = base / 'workspace'; workspace.mkdir()
+    imported = base / 'imported'; imported.mkdir()
+    nested = imported / 'nested'; nested.mkdir()
+    selected = nested / 'selected.txt'; selected.write_text('selected')
+    sibling = nested / 'unselected.txt'; sibling.write_text('unselected')
+    config = AppConfigService(base / 'config.json')
+    project = config.create_project('main', [str(workspace)])
+    index = RetrievalService(base / 'index.sqlite3')
+    queued = []
+    monkeypatch.setattr(index, 'request_index', lambda paths: queued.extend(paths))
+    app = create_app(FakeCoordinator(), config)
+    app.dependency_overrides[get_index] = lambda: index
+    with TestClient(app) as client:
+        result = client.post('/api/workspace-files/register', json={'workspace_path': str(workspace), 'project_id': project['id'], 'sources': [{'path': str(selected), 'kind': 'file', 'group_path': str(imported)}]})
+        assert result.status_code == 200
+        listing = client.get('/api/workspace-files').json()
+        file = next(item for item in listing['roots'] if item['id'] == str(selected))
+        assert file['group_path'] == str(imported)
+        assert str(imported) not in queued and str(sibling) not in queued
+        assert client.get('/api/workspace-files/preview', params={'path': str(sibling)}).status_code == 422
+        reloaded = AppConfigService(config.path)
+        assert reloaded.workspace_sources()[-1]['group_path'] == str(imported)
+        assert client.get('/api/projects').status_code == 200
+        # Group metadata must not be accepted for unrelated directories.
+        bad = client.post('/api/workspace-files/register', json={'workspace_path': str(workspace), 'sources': [{'path': str(selected), 'kind': 'file', 'group_path': str(workspace)}]})
+        assert bad.status_code == 422
+        assert selected.read_text() == 'selected'
+
+
+def test_batch_remove_is_atomic_and_preserves_originals(tmp_path, monkeypatch):
+    from src.backend.api.workspace_files import get_index
+    from src.backend.services.retrieval import RetrievalService
+    base = tmp_path.resolve()
+    workspace = base / 'workspace'; workspace.mkdir()
+    first = workspace / 'first.txt'; first.write_text('first')
+    folder = workspace / 'folder'; folder.mkdir()
+    second = folder / 'second.txt'; second.write_text('second')
+    outside = base / 'outside.txt'; outside.write_text('outside')
+    config = AppConfigService(base / 'config.json')
+    project = config.create_project('main', [str(workspace)])
+    index = RetrievalService(base / 'index.sqlite3')
+    app = create_app(FakeCoordinator(), config)
+    app.dependency_overrides[get_index] = lambda: index
+    with TestClient(app) as client:
+        bad = client.post('/api/workspace-files/remove', json={'workspace_path': str(workspace), 'project_id': project['id'], 'paths': [str(first), str(outside)]})
+        assert bad.status_code == 422
+        assert config.document_visible(first)
+        assert client.post('/api/workspace-files/remove', json={'workspace_path': str(workspace), 'paths': []}).status_code == 422
+        result = client.post('/api/workspace-files/remove', json={'workspace_path': str(workspace), 'project_id': project['id'], 'paths': [str(first), str(folder), str(second)]})
+        assert result.status_code == 200
+        assert client.get('/api/workspace-files').json()['total_files'] == 0
+        assert first.read_text() == 'first' and second.read_text() == 'second'
+        assert not AppConfigService(config.path).document_visible(second)

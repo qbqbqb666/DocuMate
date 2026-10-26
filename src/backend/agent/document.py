@@ -158,11 +158,12 @@ def read_docx(
     _require_file(path, {".docx"})
     document = Document(path)
     paragraphs = _docx_paragraph_text(document)
-    headings = [
-        {"level": paragraph.style.name, "text": paragraph.text}
-        for paragraph in document.paragraphs
-        if paragraph.text and paragraph.style.name.startswith("Heading")
-    ]
+    headings = []
+    for paragraph in document.paragraphs:
+        style = paragraph.style
+        style_name = (style.name or "") if style is not None else ""
+        if paragraph.text and style_name.startswith("Heading"):
+            headings.append({"level": style_name, "text": paragraph.text})
     tables = [
         [[cell.text for cell in row.cells] for row in table.rows[:100]]
         for table in document.tables[:20]

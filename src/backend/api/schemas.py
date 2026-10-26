@@ -361,6 +361,14 @@ class StatusEventResponse(ApiModel):
     tool_name: str | None = None
 
 
+class ToolEventResponse(ApiModel):
+    tool_call_id: str
+    name: str
+    args: dict[str, Any]
+    status: Literal["running", "success", "error", "denied"]
+    result: Any = None
+
+
 class ModelChunkEventResponse(ApiModel):
     text: str
     message_id: str | None = None

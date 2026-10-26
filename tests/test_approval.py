@@ -328,6 +328,56 @@ class ApprovalNodeTest(unittest.TestCase):
         self.assertEqual(failed["error"]["code"], "invalid_operation")
         self.assertEqual(succeeded["data"]["content"], "existing")
 
+    def test_tool_progress_reports_real_results_in_order(self) -> None:
+        (self.workspace / "existing.md").write_text("actual content", encoding="utf-8")
+        graph = build_approval_graph(execute_tools=True)
+        state = make_state([
+            {"id": "missing", "name": "read_text_file", "args": {"relative_path": "missing.md"}},
+            {"id": "read", "name": "read_text_file", "args": {"relative_path": "existing.md"}},
+            {"id": "write", "name": "write_text_file", "args": {"relative_path": "new.md", "content": "generated"}},
+        ])
+        events = list(graph.stream(state, self.config, context=self.context(PermissionMode.FULL_ACCESS), stream_mode="custom"))
+        tools = [event for event in events if event["type"] == "tool"]
+        self.assertEqual([(event["tool_call_id"], event["status"]) for event in tools], [
+            ("missing", "running"), ("missing", "error"), ("read", "running"), ("read", "success"), ("write", "running"), ("write", "success"),
+        ])
+        self.assertEqual(tools[3]["result"]["data"]["content"], "actual content")
+        self.assertEqual((self.workspace / "new.md").read_text(), "generated")
+        self.assertEqual(Path(tools[-1]["result"]["data"]["path"]), (self.workspace / "new.md").resolve())
+
+    def test_cancel_after_file_write_preserves_effect_without_claiming_success(self) -> None:
+        from src.backend.agent.nodes import _tool_executor
+        from src.backend.services.cancellation import RunCancelledError
+
+        graph = build_approval_graph(execute_tools=True)
+        context = self.context(PermissionMode.FULL_ACCESS)
+        invoke = _tool_executor.invoke
+
+        def execute_then_cancel(*args, **kwargs):
+            result = invoke(*args, **kwargs)
+            context.cancellation.cancel()
+            return result
+
+        events = []
+        with patch.object(_tool_executor, "invoke", side_effect=execute_then_cancel):
+            with self.assertRaises(RunCancelledError):
+                for event in graph.stream(make_state([
+                    {"id": "write", "name": "write_text_file", "args": {"relative_path": "created.md", "content": "already written"}},
+                ]), self.config, context=context, stream_mode="custom"):
+                    events.append(event)
+        self.assertEqual((self.workspace / "created.md").read_text(), "already written")
+        self.assertEqual([event["status"] for event in events if event["type"] == "tool"], ["running"])
+
+    def test_denied_tool_emits_no_running_event_or_file_change(self) -> None:
+        graph = build_approval_graph(execute_tools=True)
+        context = self.context(PermissionMode.REQUEST_APPROVAL)
+        graph.invoke(make_state([{"id": "write", "name": "write_text_file", "args": {"relative_path": "denied.md", "content": "no"}}]), self.config, context=context)
+        events = list(graph.stream(Command(resume={"tool_call_id": "write", "decision": "deny"}), self.config, context=context, stream_mode="custom"))
+        tools = [event for event in events if event["type"] == "tool"]
+        self.assertEqual([event["status"] for event in tools], ["denied"])
+        self.assertEqual(tools[0]["result"]["error"]["code"], "approval_denied")
+        self.assertFalse((self.workspace / "denied.md").exists())
+
     def test_repeated_failure_warns_and_round_limit_forces_final_response(self) -> None:
         graph = build_approval_graph(execute_tools=True)
         state = make_state([
